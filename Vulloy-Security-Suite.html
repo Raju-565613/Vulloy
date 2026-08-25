@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vulloy — Alert Triage &amp; Vulnerability Assessment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg-0:#0A0C0E; --bg-1:#0E1114;
+    --panel: rgba(255,255,255,0.045); --panel-strong: rgba(255,255,255,0.075);
+    --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.20);
+    --platinum:#EDEFF2; --silver:#9FA6B0; --silver-dim:#666D77;
+    --cyan:#4FE8D0; --cyan-dim: rgba(79,232,208,0.14); --cyan-line: rgba(79,232,208,0.55);
+    --amber:#FF9B57; --amber-dim: rgba(255,155,87,0.14);
+    --red:#FF6767; --red-dim: rgba(255,103,103,0.14);
+    --yellow:#F0C93E; --yellow-dim: rgba(240,201,62,0.14);
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif; --font-mono:'IBM Plex Mono', monospace;
+    --radius: 14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background: radial-gradient(ellipse 1200px 600px at 15% -10%, rgba(79,232,208,0.05), transparent 60%),
+      radial-gradient(ellipse 1000px 500px at 90% 10%, rgba(255,155,87,0.04), transparent 60%),
+      linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-0));
+    color:var(--platinum); font-family:var(--font-body); min-height:100vh; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background: var(--cyan-dim); color:var(--cyan); }
+  ::-webkit-scrollbar{width:10px; height:10px;} ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background: rgba(255,255,255,0.12); border-radius:8px;}
+  :focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; border-radius:4px; }
+
+  .glass{
+    background: linear-gradient(155deg, var(--panel-strong), var(--panel) 60%);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border:1px solid var(--border); border-radius: var(--radius); position:relative;
+  }
+  .glass::before{
+    content:""; position:absolute; inset:0; border-radius:inherit; padding:1px;
+    background: linear-gradient(155deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%, rgba(255,255,255,0.06));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none;
+  }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 32px; }
+  h1,h2,h3{ font-family:var(--font-display); font-weight:600; letter-spacing:-0.01em; color:var(--platinum); }
+  h2{ font-size:28px; margin-bottom:10px; } h3{ font-size:16px; }
+  .eyebrow{ font-family:var(--font-mono); font-size:11.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--cyan); display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .eyebrow::before{ content:""; width:20px; height:1px; background: var(--cyan-line); }
+  .lede{ color:var(--silver); font-size:15px; max-width:600px; margin-bottom:34px; }
+  .mono{ font-family:var(--font-mono); }
+
+  /* ---------- NAV ---------- */
+  nav{ position:sticky; top:0; z-index:80; background: rgba(10,12,14,0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom:1px solid var(--border); }
+  nav .wrap{ display:flex; align-items:center; justify-content:space-between; height:70px; }
+  .brand{ display:flex; align-items:center; gap:11px; text-decoration:none; }
+  .logo{ width:32px; height:32px; flex-shrink:0; }
+  .brand-name{ font-family:var(--font-display); font-weight:700; font-size:18px; letter-spacing:0.01em;
+    background: linear-gradient(120deg, var(--platinum), var(--silver) 60%, var(--cyan)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .brand-tag{ font-family:var(--font-mono); font-size:9.5px; color:var(--silver-dim); letter-spacing:0.07em; text-transform:uppercase; margin-top:1px;}
+  .pagenav{ display:flex; gap:4px; background: var(--panel); border:1px solid var(--border); border-radius:11px; padding:4px; }
+  .pagenav button{ font-family:var(--font-body); font-size:13.5px; font-weight:500; color:var(--silver); background:none; border:none; padding:8px 16px; border-radius:8px; cursor:pointer; transition: all .15s ease; }
+  .pagenav button:hover{ color:var(--platinum); }
+  .pagenav button.active{ background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03)); color:var(--platinum); box-shadow: 0 0 0 1px var(--border-strong) inset; }
+  .navactions{ display:flex; gap:10px; align-items:center; }
+  .btn{ font-family:var(--font-body); font-weight:500; font-size:13.5px; cursor:pointer; border-radius:10px; padding:9px 16px; border:1px solid var(--border-strong);
+    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02)); color:var(--platinum); display:inline-flex; align-items:center; gap:7px; transition: all .15s ease; white-space:nowrap; }
+  .btn:hover{ border-color: var(--cyan-line); box-shadow: 0 0 0 1px var(--cyan-line) inset, 0 0 20px -8px var(--cyan); transform: translateY(-1px); }
+  .btn:disabled{ opacity:0.45; cursor:not-allowed; transform:none; box-shadow:none; }
+  .btn-icon{ width:14px; height:14px; flex-shrink:0; }
+  .btn.spin .btn-icon{ animation: spin .8s linear infinite; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  /* ---------- PAGES ---------- */
+  .page{ display:none; padding:52px 0 90px; }
+  .page.active{ display:block; }
+  .page-head{ margin-bottom:40px; }
+  .page-head-row{ display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; }
+
+  /* ---------- KPI ---------- */
+  .kpi-strip{ display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:40px; }
+  .kpi{ padding:20px 20px 18px; }
+  .kpi-label{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--silver-dim); margin-bottom:9px; }
+  .kpi-value{ font-family:var(--font-mono); font-size:28px; font-weight:600; letter-spacing:-0.01em; }
+  .kpi-value.cyan{ color:var(--cyan); } .kpi-value.amber{ color:var(--amber); }
+  .kpi-sub{ font-size:12px; color:var(--silver); margin-top:5px; }
+
+  /* ---------- BANNER ---------- */
+  .banner{ display:flex; align-items:center; gap:14px; padding:16px 20px; border-radius:12px; margin-bottom:32px; border:1px solid var(--border-strong); background: var(--amber-dim); }
+  .banner svg{ width:20px; height:20px; color:var(--amber); flex-shrink:0; }
+  .banner p{ font-size:13.5px; color:var(--platinum); }
+  .banner a{ color:var(--cyan); text-decoration:underline; cursor:pointer; }
+  .banner.cyan{ background: var(--cyan-dim); } .banner.cyan svg{ color:var(--cyan); }
+
+  /* ---------- FORGE ---------- */
+  .forge-row{ display:grid; grid-template-columns: 1fr 56px 1fr 56px 1fr 56px 1fr; align-items:center; margin-bottom:40px; }
+  .stage{ padding:22px 20px; }
+  .stage-icon{ width:26px; height:26px; margin-bottom:14px; color:var(--cyan); }
+  .stage-icon.amber{ color:var(--amber); }
+  .stage-title{ font-family:var(--font-display); font-size:14px; font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+  .stage-desc{ font-size:12px; color:var(--silver); margin-bottom:12px; line-height:1.5;}
+  .stage-count{ font-family:var(--font-mono); font-size:22px; font-weight:600; }
+  .stage-count-label{ font-family:var(--font-mono); font-size:10px; color:var(--silver-dim); text-transform:uppercase; letter-spacing:.06em; margin-top:2px;}
+  .connector{ position:relative; height:2px; background: var(--border-strong); }
+  .connector::after{ content:""; position:absolute; top:50%; left:0; width:9px; height:9px; margin-top:-4.5px; border-radius:50%; background: var(--cyan); box-shadow: 0 0 10px 2px var(--cyan); animation: travel 2.6s linear infinite; }
+  .connector.c2::after{ animation-delay: .65s; background:var(--amber); box-shadow:0 0 10px 2px var(--amber); }
+  .connector.c3::after{ animation-delay: 1.3s; }
+  @keyframes travel{ 0%{ left:0; opacity:0; } 8%{opacity:1;} 92%{opacity:1;} 100%{ left:100%; opacity:0; } }
+  .tiny-badge{ font-family:var(--font-mono); font-size:9px; text-transform:uppercase; padding:2px 7px; border-radius:20px; letter-spacing:.04em; }
+  .tiny-badge.trained{ background:var(--cyan-dim); color:var(--cyan); }
+  .tiny-badge.untrained{ background: var(--red-dim); color:var(--red); }
+
+  /* ---------- LAB ---------- */
+  .lab-grid{ display:grid; grid-template-columns: 1.1fr 1.4fr; gap:18px; align-items:stretch; margin-bottom:20px; }
+  .lab-panel{ padding:28px; }
+  .lab-panel.disabled{ opacity:0.4; pointer-events:none; }
+  .slider-row{ margin-top:24px; }
+  .slider-label-row{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:9px; }
+  .slider-label{ font-size:13px; color:var(--silver); }
+  .slider-value{ font-family:var(--font-mono); font-size:19px; color:var(--cyan); font-weight:600; }
+  input[type="range"]{ -webkit-appearance:none; width:100%; height:4px; border-radius:4px;
+    background: linear-gradient(90deg, var(--cyan) 0%, var(--cyan) var(--fill,50%), rgba(255,255,255,0.12) var(--fill,50%)); outline:none; }
+  input[type="range"]::-webkit-slider-thumb{ -webkit-appearance:none; width:17px; height:17px; border-radius:50%;
+    background: linear-gradient(155deg, #fff, var(--cyan)); border:2px solid rgba(10,12,14,0.6); box-shadow: 0 0 0 4px rgba(79,232,208,0.18); cursor:pointer; }
+  .lab-scale{ display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10px; color:var(--silver-dim); margin-top:7px; }
+  .lab-stats{ display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-top:24px; }
+  .lab-stat{ background: var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+  .lab-stat-label{ font-size:11.5px; color:var(--silver); margin-bottom:5px; }
+  .lab-stat-value{ font-family:var(--font-mono); font-size:20px; font-weight:600; }
+  .chart-panel{ padding:24px 26px; display:flex; flex-direction:column; }
+  .chart-title{ font-family:var(--font-display); font-size:13.5px; font-weight:600; margin-bottom:2px;}
+  .chart-desc{ font-size:11.5px; color:var(--silver-dim); margin-bottom:16px; }
+  .chart-holder{ position:relative; flex:1; min-height:200px; }
+  .charts-row{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px; }
+  .donut-legend{ display:flex; gap:20px; margin-top:14px; justify-content:center; }
+  .legend-item{ display:flex; align-items:center; gap:7px; font-size:12px; color:var(--silver); }
+  .legend-dot{ width:8px; height:8px; border-radius:50%; }
+
+  /* ---------- TABLES ---------- */
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  thead th{ text-align:left; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--silver-dim); padding:0 14px 11px; font-weight:500; border-bottom:1px solid var(--border); }
+  tbody td{ padding:12px 14px; border-bottom:1px solid var(--border); color:var(--silver); }
+  tbody tr:last-child td{ border-bottom:none; } tbody tr:hover{ background: var(--panel); }
+  .mono-cell{ font-family:var(--font-mono); color:var(--platinum); }
+  .pill{ display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:4px 10px; border-radius:20px; font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.03em;}
+  .pill.amber{ background:var(--amber-dim); color:var(--amber); } .pill.cyan{ background:var(--cyan-dim); color:var(--cyan); }
+  .pill.red{ background:var(--red-dim); color:var(--red); } .pill.yellow{ background:var(--yellow-dim); color:var(--yellow); }
+  .pill.gray{ background:var(--panel); color:var(--silver); border:1px solid var(--border); }
+  .empty-state{ text-align:center; padding:42px 20px; color:var(--silver-dim); }
+  .empty-state svg{ width:28px; height:28px; margin-bottom:10px; color:var(--cyan); }
+
+  /* ---------- EXPLORER ---------- */
+  .explorer-controls{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--silver-dim); }
+  .field input[type="text"], .field select{ background: var(--panel); border:1px solid var(--border); border-radius:8px; color:var(--platinum); font-family:var(--font-body); font-size:13px; padding:8px 12px; min-width:160px; }
+  .field.grow{ flex:1; min-width:200px; } .field.grow input{ width:100%; }
+  .explorer-meta{ display:flex; justify-content:space-between; align-items:center; margin-bottom:13px; font-size:12px; color:var(--silver-dim); }
+  .conf-bar{ width:60px; height:5px; border-radius:4px; background: rgba(255,255,255,0.08); overflow:hidden; display:inline-block; vertical-align:middle; margin-right:7px; }
+  .conf-bar-fill{ height:100%; background: linear-gradient(90deg, var(--cyan), #8FF3E4); }
+
+  /* ---------- TRAIN PAGE ---------- */
+  .train-grid{ display:grid; grid-template-columns:1fr 1.5fr; gap:18px; margin-bottom:24px; }
+  .config-row{ display:flex; flex-direction:column; gap:7px; margin-top:18px; }
+  .config-row label{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--silver-dim); }
+  .config-row select{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background-color: #14171b;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234FE8D0' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 12px center; background-size: 15px;
+    border:1px solid var(--border); border-radius:8px; color:var(--platinum); font-family:var(--font-mono); font-size:13.5px; padding:10px 38px 10px 12px;
+    cursor:pointer; transition: border-color .15s ease; width:100%;
+  }
+  .config-row select:hover{ border-color: var(--border-strong); }
+  .config-row select:focus{ outline:none; border-color: var(--cyan-line); box-shadow: 0 0 0 3px rgba(79,232,208,0.12); }
+  .config-row select option{ background-color:#14171b; color:var(--platinum); font-family:var(--font-mono); padding:8px; }
+  .num-stepper{ display:flex; align-items:stretch; border:1px solid var(--border); border-radius:8px; background-color:#14171b; overflow:hidden; transition: border-color .15s ease; }
+  .num-stepper:focus-within{ border-color: var(--cyan-line); box-shadow: 0 0 0 3px rgba(79,232,208,0.12); }
+  .num-stepper input[type=number]{
+    appearance:none; -moz-appearance:textfield; background:none; border:none; color:var(--platinum);
+    font-family:var(--font-mono); font-size:13.5px; padding:10px 8px 10px 12px; width:100%; text-align:left;
+  }
+  .num-stepper input[type=number]::-webkit-outer-spin-button, .num-stepper input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .num-stepper input[type=number]:focus{ outline:none; }
+  .num-stepper .step-btn{ background: rgba(255,255,255,0.04); border:none; border-left:1px solid var(--border); width:32px; color:var(--silver); cursor:pointer; font-family:var(--font-mono); font-size:13px; display:flex; align-items:center; justify-content:center; transition: all .12s ease; }
+  .num-stepper .step-btn:hover{ background: var(--cyan-dim); color:var(--cyan); }
+  .num-stepper .step-btn:active{ transform: scale(0.94); }
+  .num-stepper .step-dn{ border-left:1px solid var(--border); }
+  .feature-checklist{ display:grid; grid-template-columns:repeat(2,1fr); gap:4px 20px; }
+  .feature-check{ display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; cursor:pointer; transition: background .12s ease; }
+  .feature-check:hover{ background: var(--panel); }
+  .feature-check input[type=checkbox]{ appearance:none; -webkit-appearance:none; width:17px; height:17px; border-radius:5px; border:1.5px solid var(--border-strong); background: rgba(255,255,255,0.03); flex-shrink:0; cursor:pointer; position:relative; transition: all .12s ease; }
+  .feature-check input[type=checkbox]:checked{ background: linear-gradient(155deg, var(--cyan), #8FF3E4); border-color: var(--cyan); }
+  .feature-check input[type=checkbox]:checked::after{ content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--bg-0); font-weight:700; }
+  .feature-check label{ font-size:13px; color:var(--platinum); cursor:pointer; }
+  .feature-check .core-tag{ font-family:var(--font-mono); font-size:9px; color:var(--silver-dim); text-transform:uppercase; margin-left:auto; }
+  @media (max-width: 980px){ .feature-checklist{ grid-template-columns:1fr; } }
+  .contrib-row{ display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; }
+  .contrib-name{ width:170px; flex-shrink:0; color:var(--silver); }
+  .contrib-track{ flex:1; height:16px; background: rgba(255,255,255,0.05); border-radius:4px; position:relative; overflow:hidden; }
+  .contrib-fill{ position:absolute; top:0; bottom:0; }
+  .contrib-fill.pos{ background: var(--amber); left:50%; }
+  .contrib-fill.neg{ background: var(--cyan); right:50%; }
+  .contrib-mid{ position:absolute; left:50%; top:0; bottom:0; width:1px; background: var(--border-strong); }
+  tbody tr.clickable-row{ cursor:pointer; }
+  .model-report-card{ padding:30px 32px; }
+  .report-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  .report-table td{ padding:9px 0; border-bottom:1px solid var(--border); color:var(--platinum); vertical-align:top; }
+  .report-table tr:last-child td{ border-bottom:none; }
+  .metrics-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:20px 0; }
+  .metric-box{ background: var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; text-align:center; }
+  .metric-box .v{ font-family:var(--font-mono); font-size:24px; font-weight:600; color:var(--cyan); }
+  .metric-box .l{ font-size:11px; color:var(--silver); margin-top:4px; }
+  .cm-table{ margin-top:16px; }
+  .cm-table td{ text-align:center; font-family:var(--font-mono); padding:14px; }
+  .cm-correct{ background: var(--cyan-dim); color:var(--cyan); border-radius:8px; }
+  .cm-wrong{ background: var(--red-dim); color:var(--red); border-radius:8px; }
+  .feat-bar-row{ display:flex; align-items:center; gap:12px; margin-bottom:11px; }
+  .feat-bar-label{ font-size:12px; color:var(--silver); width:150px; flex-shrink:0; }
+  .feat-bar-track{ flex:1; height:8px; background: rgba(255,255,255,0.06); border-radius:6px; overflow:hidden; }
+  .feat-bar-fill{ height:100%; background: linear-gradient(90deg, var(--cyan), var(--amber)); border-radius:6px; }
+  .feat-bar-val{ font-family:var(--font-mono); font-size:11.5px; color:var(--silver-dim); width:40px; text-align:right; }
+  .train-status{ font-family:var(--font-mono); font-size:12px; color:var(--silver-dim); margin-top:14px; }
+
+  /* ---------- VULN PAGE ---------- */
+  textarea#vulnInput{ width:100%; min-height:150px; background: var(--panel); border:1px solid var(--border); border-radius:12px; color:var(--platinum); font-family:var(--font-mono); font-size:13.5px; padding:16px; resize:vertical; line-height:1.6; }
+  textarea#vulnInput:focus{ border-color: var(--cyan-line); }
+  .example-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .example-chip{ font-family:var(--font-mono); font-size:11.5px; color:var(--silver); border:1px solid var(--border); padding:6px 12px; border-radius:20px; cursor:pointer; background:none; transition: all .15s ease; }
+  .example-chip:hover{ border-color: var(--cyan-line); color:var(--cyan); }
+  .finding-card{ padding:18px 20px; margin-bottom:12px; display:flex; gap:16px; align-items:flex-start; }
+  .finding-icon{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .finding-icon svg{ width:18px; height:18px; }
+  .finding-icon.critical{ background:var(--red-dim); color:var(--red); }
+  .finding-icon.high{ background:var(--amber-dim); color:var(--amber); }
+  .finding-icon.medium{ background:var(--yellow-dim); color:var(--yellow); }
+  .finding-title{ font-family:var(--font-display); font-size:14.5px; font-weight:600; margin-bottom:3px; display:flex; align-items:center; gap:10px;}
+  .finding-match{ font-family:var(--font-mono); font-size:12px; color:var(--silver); background: rgba(0,0,0,0.3); padding:3px 8px; border-radius:5px; margin:8px 0; display:inline-block; word-break:break-all; }
+  .finding-tip{ font-size:12.5px; color:var(--silver); line-height:1.6; }
+
+  /* ---------- HOW ---------- */
+  .how-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .how-card{ padding:22px 20px; } .how-num{ font-family:var(--font-mono); font-size:11.5px; color:var(--cyan); margin-bottom:12px; }
+  .how-card p{ font-size:12.5px; color:var(--silver); line-height:1.6; }
+
+  /* ---------- TOAST ---------- */
+  #toast{ position:fixed; bottom:28px; right:28px; z-index:200; display:flex; flex-direction:column; gap:10px; }
+  .toast-item{ padding:14px 18px; border-radius:12px; display:flex; align-items:center; gap:12px; min-width:280px; animation: slideIn .25s ease; }
+  .toast-item svg{ width:18px; height:18px; color:var(--cyan); flex-shrink:0; }
+  .toast-item p{ font-size:13px; color:var(--platinum); }
+  .toast-item span{ display:block; font-size:11px; color:var(--silver-dim); margin-top:2px; }
+  @keyframes slideIn{ from{ transform:translateX(20px); opacity:0;} to{ transform:translateX(0); opacity:1;} }
+
+  footer{ padding:36px 0 50px; border-top:1px solid var(--border); margin-top:10px;}
+  .footer-wrap{ display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:24px; }
+  .stack-chips{ display:flex; gap:8px; flex-wrap:wrap; }
+  .chip{ font-family:var(--font-mono); font-size:10.5px; color:var(--silver); border:1px solid var(--border); padding:5px 11px; border-radius:20px; }
+  .social-pills{ display:flex; gap:10px; flex-wrap:wrap; }
+  .social-pill{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--font-body); font-size:12.5px; font-weight:500;
+    color:var(--silver); text-decoration:none; border:1px solid var(--border-strong); border-radius:30px; padding:9px 16px 9px 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01)); transition: all .15s ease;
+  }
+  .social-pill svg{ width:15px; height:15px; }
+  .social-pill:hover{ color:var(--cyan); border-color: var(--cyan-line); box-shadow: 0 0 16px -6px var(--cyan); transform: translateY(-1px); }
+  .copyright-bar{ margin-top:26px; padding-top:20px; border-top:1px solid var(--border); font-size:11.5px; color:var(--silver-dim); display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .copyright-bar .mono{ color:var(--silver); }
+  .copyright-dot{ color:var(--border-strong); }
+
+  /* ---------- CONTACT PAGE ---------- */
+  .contact-hero{ display:flex; align-items:center; gap:22px; padding:30px 32px; margin-bottom:22px; }
+  .contact-avatar{
+    width:64px; height:64px; border-radius:16px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--bg-0);
+    background: linear-gradient(155deg, var(--cyan), #8FF3E4);
+  }
+  .contact-link{ color:var(--cyan); text-decoration:underline; }
+  .contact-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .contact-card{ padding:22px 20px; display:flex; flex-direction:column; gap:14px; text-decoration:none; color:inherit; transition: all .15s ease; }
+  .contact-card:hover{ border-color: var(--cyan-line); transform: translateY(-2px); }
+  .contact-icon{ width:38px; height:38px; border-radius:10px; background: var(--panel); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--cyan); }
+  .contact-icon svg{ width:18px; height:18px; }
+  .contact-card h3{ font-size:13.5px; margin-bottom:3px; }
+  .contact-card p{ font-size:12px; color:var(--silver); word-break:break-word; }
+
+  @media (max-width: 980px){
+    .contact-grid{ grid-template-columns:1fr 1fr; }
+    .contact-hero{ flex-direction:column; text-align:center; }
+    .learn-grid{ grid-template-columns:1fr; }
+  }
+
+  /* ---------- LEARN PAGE ---------- */
+  .learn-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .learn-card{ padding:24px 26px; }
+  .learn-card h3{ margin-bottom:10px; font-size:15px; }
+  .learn-card p{ font-size:13px; color:var(--silver); line-height:1.7; }
+  .learn-glossary{ display:flex; flex-direction:column; gap:12px; }
+  .glossary-row{ padding:20px 24px; display:flex; gap:18px; align-items:flex-start; }
+  .glossary-row h3{ font-size:14px; margin-bottom:6px; }
+  .glossary-row p{ font-size:12.5px; color:var(--silver); line-height:1.65; }
+  .glossary-row .pill{ flex-shrink:0; margin-top:2px; }
+
+  @media (max-width: 980px){
+    .wrap{ padding:0 18px; } .pagenav{ display:none; }
+    .kpi-strip{ grid-template-columns:1fr 1fr; }
+    .forge-row{ grid-template-columns:1fr; } .connector{ width:2px; height:36px; margin:0 auto; }
+    .connector::after{ left:50%; top:0; margin-left:-4.5px; animation-name: travelV; }
+    @keyframes travelV{ 0%{ top:0; opacity:0;} 8%{opacity:1;} 92%{opacity:1;} 100%{ top:100%; opacity:0;} }
+    .lab-grid, .charts-row, .train-grid{ grid-template-columns:1fr; }
+    .how-grid, .metrics-grid{ grid-template-columns:1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a href="#" class="brand" onclick="return false;">
+      <svg class="logo" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="logoGrad" x1="4" y1="4" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#EDEFF2"/><stop offset="0.55" stop-color="#9FA6B0"/><stop offset="1" stop-color="#4FE8D0"/></linearGradient></defs>
+        <path d="M22 3 L39 12.5 V31.5 L22 41 L5 31.5 V12.5 Z" stroke="url(#logoGrad)" stroke-width="2" fill="rgba(255,255,255,0.03)"/>
+        <path d="M13 26 L18.5 26 L21 20 L24 30 L26.5 22 L29.5 26 L33 26" stroke="#4FE8D0" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div><div class="brand-name">VULLOY</div><div class="brand-tag">Triage &amp; Vulnerability Intel</div></div>
+    </a>
+    <div class="pagenav">
+      <button data-page="dashboard" class="active">Dashboard</button>
+      <button data-page="train">Train model</button>
+      <button data-page="vuln">Vulnerability scan</button>
+      <button data-page="learn">Learn</button>
+      <button data-page="contact">Contact</button>
+    </div>
+    <div class="navactions">
+      <button class="btn" id="exportPdfBtn">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        Export PDF
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ================= DASHBOARD PAGE ================= -->
+<div class="page active" id="page-dashboard">
+  <div class="wrap">
+    <div class="page-head">
+      <div class="page-head-row">
+        <div>
+          <div class="eyebrow">Live alert triage</div>
+          <h2>Dashboard</h2>
+          <p class="lede" style="margin-bottom:0;">Simulated alert stream, resolved by a real deterministic rule engine and (once trained) a genuine logistic regression classifier — not fabricated output.</p>
+          <p class="mono" style="font-size:11px; color:var(--silver-dim); margin-top:8px; max-width:600px;">⚠ All alert data below is synthetically generated in your browser for demonstration. It is not real network data and does not reflect this or any device.</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span class="mono" style="font-size:11.5px; color:var(--silver-dim);" id="lastRunLabel">Not yet run</span>
+          <button class="btn" id="runBtn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Run analysis
+          </button>
+          <button class="btn" id="exportCsvBtn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            CSV
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass" id="dataSourcePanel" style="padding:20px 24px; margin-bottom:32px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+        <div>
+          <h3 style="margin-bottom:4px;">Data source</h3>
+          <p style="font-size:12.5px; color:var(--silver);" id="dataSourceDesc">Using synthetic demo data, generated in your browser.</p>
+        </div>
+        <div class="pagenav" style="background:var(--panel);">
+          <button id="sourceSyntheticBtn" class="active">Synthetic (demo)</button>
+          <button id="sourceRealBtn">My own data</button>
+        </div>
+      </div>
+      <div id="uploadPanel" style="display:none; margin-top:18px; padding-top:18px; border-top:1px solid var(--border);">
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <label class="btn" for="csvFileInput" style="cursor:pointer;">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            Choose CSV file
+          </label>
+          <input type="file" id="csvFileInput" accept=".csv" style="display:none;">
+          <button class="btn" id="downloadTemplateBtn" style="border-color:var(--border);">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download template
+          </button>
+          <span class="mono" id="uploadStatus" style="font-size:12px; color:var(--silver-dim);"></span>
+        </div>
+        <p style="font-size:11.5px; color:var(--silver-dim); margin-top:12px; line-height:1.6;">
+          Required columns: <span class="mono">port, protocol, packets_per_sec, flow_duration_ms, severity, prior_alert_count</span>.
+          Optional: <span class="mono">internal, hour, label</span> (label enables accuracy scoring against your data). Common alternate header names are recognized automatically. Everything is parsed locally — your file is never uploaded anywhere.
+        </p>
+        <div id="uploadWarnings" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <div class="banner" id="untrainedBanner" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <p><strong id="unscoredCount">0</strong> alerts are awaiting ML classification. <a data-goto="train">Train the model</a> to score them — until then they're held for manual review, not guessed at.</p>
+    </div>
+
+    <div class="kpi-strip">
+      <div class="glass kpi"><div class="kpi-label">Alerts processed</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-sub">this session</div></div>
+      <div class="glass kpi"><div class="kpi-label">Auto-filtered</div><div class="kpi-value cyan" id="kpiFiltered">—</div><div class="kpi-sub" id="kpiFilteredSub">of total volume</div></div>
+      <div class="glass kpi"><div class="kpi-label">Left for analyst</div><div class="kpi-value" id="kpiRemaining">—</div><div class="kpi-sub" id="kpiRemainingSub">requires review</div></div>
+      <div class="glass kpi"><div class="kpi-label">Threats missed</div><div class="kpi-value amber" id="kpiMissed">—</div><div class="kpi-sub" id="kpiMissedSub">of real attacks</div></div>
+    </div>
+
+    <div class="eyebrow">01 — Pipeline</div>
+    <h2 style="margin-bottom:24px;">The Forge</h2>
+    <div class="forge-row">
+      <div class="glass stage"><svg class="stage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <div class="stage-title">Raw alerts</div><div class="stage-desc">Simulated stream, generated live in your browser.</div>
+        <div class="stage-count" id="stageTotal">—</div><div class="stage-count-label">Incoming</div></div>
+      <div class="connector"></div>
+      <div class="glass stage"><svg class="stage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <div class="stage-title">Rule engine</div><div class="stage-desc">Deterministic heuristics, real logic, zero cost.</div>
+        <div class="stage-count" id="stageRules">—</div><div class="stage-count-label">Decided</div></div>
+      <div class="connector c2"></div>
+      <div class="glass stage"><svg class="stage-icon amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <div class="stage-title">ML classifier <span class="tiny-badge untrained" id="mlBadge">untrained</span></div>
+        <div class="stage-desc">Logistic regression, trained via real gradient descent.</div>
+        <div class="stage-count" id="stageML">—</div><div class="stage-count-label">Scored</div></div>
+      <div class="connector c3"></div>
+      <div class="glass stage"><svg class="stage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l3 7h7l-5.5 4.5L18.5 21 12 16.5 5.5 21l2-7.5L2 9h7z"/></svg>
+        <div class="stage-title">Refined output</div><div class="stage-desc">One label, one confidence score.</div>
+        <div class="stage-count" id="stageOut">—</div><div class="stage-count-label">Triaged</div></div>
+    </div>
+
+    <div class="eyebrow">02 — Calibration</div>
+    <h2 style="margin-bottom:24px;">The Temper Lab</h2>
+    <div class="lab-grid">
+      <div class="glass lab-panel" id="labPanel">
+        <h3>Detection threshold</h3>
+        <p style="font-size:12.5px; color:var(--silver); margin-top:6px;">Minimum confidence before the classifier calls an alert a real threat.</p>
+        <div class="slider-row">
+          <div class="slider-label-row"><span class="slider-label">Threshold</span><span class="slider-value" id="threshVal">0.50</span></div>
+          <input type="range" id="threshSlider" min="0.05" max="0.95" step="0.05" value="0.5">
+          <div class="lab-scale"><span>0.05 — cautious</span><span>0.95 — permissive</span></div>
+        </div>
+        <div class="lab-stats">
+          <div class="lab-stat"><div class="lab-stat-label">Missed threats</div><div class="lab-stat-value amber" id="labMissed">—</div></div>
+          <div class="lab-stat"><div class="lab-stat-label">Extra false alarms</div><div class="lab-stat-value" id="labExtra">—</div></div>
+          <div class="lab-stat"><div class="lab-stat-label">Recall on threats</div><div class="lab-stat-value cyan" id="labRecall">—</div></div>
+          <div class="lab-stat"><div class="lab-stat-label">Accuracy</div><div class="lab-stat-value" id="labAccuracy">—</div></div>
+        </div>
+      </div>
+      <div class="glass chart-panel">
+        <div class="chart-title">Threshold tradeoff curve</div>
+        <div class="chart-desc">Missed threats vs. extra false alarms, from the real trained model</div>
+        <div class="chart-holder" id="tradeoffHolder"><canvas id="tradeoffChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="glass chart-panel"><div class="chart-title">Decided by</div><div class="chart-desc">Which layer resolved each alert</div>
+        <div class="chart-holder" id="decidedByHolder" style="min-height:190px;"><canvas id="decidedByChart"></canvas></div>
+        <div class="donut-legend"><div class="legend-item"><span class="legend-dot" style="background:var(--silver)"></span>Rule engine</div><div class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span>ML model</div></div>
+      </div>
+      <div class="glass chart-panel"><div class="chart-title">Final verdict</div><div class="chart-desc">Noise filtered vs. threats surfaced</div>
+        <div class="chart-holder" id="verdictHolder" style="min-height:190px;"><canvas id="verdictChart"></canvas></div>
+        <div class="donut-legend"><div class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span>False positive</div><div class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span>True positive</div></div>
+      </div>
+    </div>
+
+    <div class="eyebrow">03 — Risk review</div>
+    <h2>Missed threats</h2>
+    <p class="lede">Every row here is a real attack the pipeline told the analyst was noise.</p>
+    <div class="glass" style="padding:8px; margin-bottom:40px;">
+      <div class="table-wrap"><table id="missedTable"><thead><tr><th>Alert ID</th><th>Severity</th><th>Packets/sec</th><th>Port</th><th>Prior fires</th><th>Decided by</th><th>Confidence</th></tr></thead><tbody id="missedBody"></tbody></table></div>
+      <div class="empty-state" id="missedEmpty" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><div>No real attacks missed at this threshold.</div></div>
+    </div>
+
+    <div class="eyebrow">04 — Investigate</div>
+    <h2>Alert explorer</h2>
+    <p class="lede">Search, filter, and inspect every alert the pipeline has triaged.</p>
+    <div class="explorer-controls">
+      <div class="field grow"><label for="searchInput">Search alert ID</label><input type="text" id="searchInput" placeholder="ALERT-00042"></div>
+      <div class="field"><label for="decisionFilter">Final verdict</label><select id="decisionFilter"><option value="all">All</option><option value="True Positive">True positive</option><option value="False Positive">False positive</option><option value="Unscored">Unscored</option></select></div>
+      <div class="field"><label for="deciderFilter">Decided by</label><select id="deciderFilter"><option value="all">All</option><option value="Rule Engine">Rule engine</option><option value="ML Model">ML model</option><option value="Pending Training">Pending training</option></select></div>
+    </div>
+    <div class="explorer-meta"><span id="explorerCount">—</span><span>Showing latest 60 matches</span></div>
+    <div class="glass" style="padding:8px;"><div class="table-wrap"><table><thead><tr><th>Alert ID</th><th>Src</th><th>Port</th><th>Protocol</th><th>Severity</th><th>Verdict</th><th>Decided by</th><th>Confidence</th></tr></thead><tbody id="explorerBody"></tbody></table></div></div>
+  </div>
+</div>
+
+<!-- ================= TRAIN MODEL PAGE ================= -->
+<div class="page" id="page-train">
+  <div class="wrap">
+    <div class="page-head">
+      <div class="eyebrow">Model training</div>
+      <h2>Train the classifier</h2>
+      <p class="lede" style="margin-bottom:0;">A real logistic regression model, trained from scratch via gradient descent on the current alert batch — genuine loss convergence and held-out test evaluation, not a canned formula.</p>
+    </div>
+
+    <div class="train-grid">
+      <div class="glass lab-panel">
+        <h3>Training configuration</h3>
+        <div class="config-row"><label for="epochsInput">Epochs</label>
+          <div class="num-stepper">
+            <input type="number" id="epochsInput" value="150" min="10" max="500" step="10">
+            <button type="button" class="step-btn step-dn" id="epochsDown" aria-label="Decrease epochs">−</button>
+            <button type="button" class="step-btn step-up" id="epochsUp" aria-label="Increase epochs">+</button>
+          </div>
+        </div>
+        <div class="config-row"><label for="lrSelect">Learning rate</label>
+          <select id="lrSelect">
+            <option value="0.5">0.5 (aggressive)</option>
+            <option value="0.3">0.3 (fast)</option>
+            <option value="0.2">0.2 (brisk)</option>
+            <option value="0.15" selected>0.15 (balanced)</option>
+            <option value="0.1">0.1 (measured)</option>
+            <option value="0.05">0.05 (careful)</option>
+            <option value="0.02">0.02 (cautious)</option>
+            <option value="0.01">0.01 (slow)</option>
+            <option value="0.005">0.005 (very slow)</option>
+          </select></div>
+        <div class="config-row"><label for="splitSelect">Train / test split</label>
+          <select id="splitSelect">
+            <option value="0.6">60% / 40%</option>
+            <option value="0.65">65% / 35%</option>
+            <option value="0.7">70% / 30%</option>
+            <option value="0.75">75% / 25%</option>
+            <option value="0.8" selected>80% / 20%</option>
+            <option value="0.85">85% / 15%</option>
+            <option value="0.9">90% / 10%</option>
+            <option value="0.95">95% / 5%</option>
+          </select></div>
+        <div class="config-row"><label for="l2Select">L2 regularization</label>
+          <select id="l2Select">
+            <option value="0">None</option>
+            <option value="0.0001">0.0001 (minimal)</option>
+            <option value="0.001" selected>0.001 (light)</option>
+            <option value="0.005">0.005 (moderate)</option>
+            <option value="0.01">0.01 (firm)</option>
+            <option value="0.05">0.05 (strong)</option>
+            <option value="0.1">0.1 (heavy)</option>
+          </select></div>
+        <button class="btn" id="trainBtn" style="margin-top:22px; width:100%; justify-content:center;">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Start training
+        </button>
+        <div class="train-status" id="trainStatus">No model trained yet in this session.</div>
+      </div>
+      <div class="glass chart-panel">
+        <div class="chart-title">Training loss curve</div>
+        <div class="chart-desc">Binary cross-entropy loss per epoch — real computed values</div>
+        <div class="chart-holder" id="lossHolder" style="min-height:260px;"><canvas id="lossChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="glass" style="padding:26px 28px; margin-bottom:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+        <div>
+          <h3>Features to include</h3>
+          <p style="font-size:12px; color:var(--silver-dim); margin-top:4px;">14 available signals, engineered from the raw alert data. Toggle any combination to experiment.</p>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="featSelectAll" style="padding:7px 14px; font-size:12px; border-color:var(--border);">Select all</button>
+          <button class="btn" id="featSelectCore" style="padding:7px 14px; font-size:12px; border-color:var(--border);">Core 6 only</button>
+        </div>
+      </div>
+      <div class="feature-checklist" id="featureChecklist"></div>
+    </div>
+
+    <div id="trainResults" style="display:none;">
+      <div class="eyebrow">Held-out test results</div>
+      <h3 style="margin-bottom:16px; font-size:18px;">Evaluated on data the model never trained on</h3>
+      <div class="metrics-grid">
+        <div class="glass metric-box"><div class="v" id="metricAcc">—</div><div class="l">Accuracy</div></div>
+        <div class="glass metric-box"><div class="v" id="metricPrec">—</div><div class="l">Precision</div></div>
+        <div class="glass metric-box"><div class="v" id="metricRec">—</div><div class="l">Recall</div></div>
+        <div class="glass metric-box"><div class="v" id="metricF1">—</div><div class="l">F1 score</div></div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:8px;">
+        <div class="glass" style="padding:24px;">
+          <h3 style="margin-bottom:14px;">Confusion matrix</h3>
+          <table class="cm-table">
+            <thead><tr><th></th><th>Predicted noise</th><th>Predicted threat</th></tr></thead>
+            <tbody>
+              <tr><td style="text-align:left; color:var(--silver-dim); font-family:var(--font-mono); font-size:11px;">Actually noise</td><td><div class="cm-correct" id="cmTn">—</div></td><td><div class="cm-wrong" id="cmFp">—</div></td></tr>
+              <tr><td style="text-align:left; color:var(--silver-dim); font-family:var(--font-mono); font-size:11px;">Actually threat</td><td><div class="cm-wrong" id="cmFn">—</div></td><td><div class="cm-correct" id="cmTp">—</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="glass" style="padding:24px;">
+          <h3 style="margin-bottom:16px;">Learned feature importance</h3>
+          <div id="featureBars"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="modelReportSection" style="display:none;">
+      <div class="eyebrow">Summary</div>
+      <h2 style="margin-bottom:20px;">Model Report</h2>
+      <div class="glass model-report-card">
+        <h3 style="margin-bottom:10px;">Summary</h3>
+        <p id="reportNarrative" style="font-size:13.5px; color:var(--silver); line-height:1.7; margin-bottom:24px;"></p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+          <div>
+            <h3 style="margin-bottom:12px; font-size:13.5px;">Training configuration</h3>
+            <table class="report-table"><tbody id="reportConfigBody"></tbody></table>
+          </div>
+          <div>
+            <h3 style="margin-bottom:12px; font-size:13.5px;">Performance on held-out data</h3>
+            <table class="report-table"><tbody id="reportMetricsBody"></tbody></table>
+          </div>
+        </div>
+        <p style="font-size:11.5px; color:var(--silver-dim); margin-top:22px; padding-top:16px; border-top:1px solid var(--border);">
+          This report reflects the model currently active on the Dashboard. Click <strong>Export PDF</strong> in the top nav to save a full copy including alert triage and vulnerability scan results.
+        </p>
+      </div>
+    </div>
+
+    <div id="runHistorySection" style="display:none; margin-top:32px;">
+      <div class="eyebrow">Experiment tracking</div>
+      <h2 style="margin-bottom:6px;">Run history</h2>
+      <p class="lede" style="margin-bottom:16px;">Every training run this session, kept so you can compare configurations. Reactivate any past run on the Dashboard.</p>
+      <div class="glass" style="padding:8px;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Time</th><th>Features</th><th>Epochs</th><th>Learning rate</th><th>Accuracy</th><th>Recall</th><th></th></tr></thead>
+            <tbody id="runHistoryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= VULNERABILITY SCAN PAGE ================= -->
+<div class="page" id="page-vuln">
+  <div class="wrap">
+    <div class="page-head">
+      <div class="eyebrow">Input security scan</div>
+      <h2>Vulnerability scanner</h2>
+      <p class="lede" style="margin-bottom:0;">Paste a URL, form value, or request parameter. Real regex-based pattern detection runs against your exact input — SQL injection, XSS, command injection, path traversal, open redirect, and NoSQL injection.</p>
+      <p class="mono" style="font-size:11px; color:var(--silver-dim); margin-top:8px; max-width:600px;">This scans only the text you paste below — it does not access your device, files, or network in any way.</p>
+    </div>
+
+    <div class="glass" style="padding:26px;">
+      <textarea id="vulnInput" placeholder="Paste input to scan, e.g. a URL query string or form field value..."></textarea>
+      <div class="example-chips">
+        <button class="example-chip" data-example="sqli">SQLi example</button>
+        <button class="example-chip" data-example="xss">XSS example</button>
+        <button class="example-chip" data-example="path">Path traversal example</button>
+        <button class="example-chip" data-example="cmdi">Command injection example</button>
+        <button class="example-chip" data-example="benign">Benign example</button>
+      </div>
+      <button class="btn" id="scanBtn" style="margin-top:18px;">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        Scan input
+      </button>
+    </div>
+
+    <div style="margin-top:32px;" id="findingsSection" style="display:none;">
+      <h3 id="findingsHeading" style="margin-bottom:16px;"></h3>
+      <div id="findingsBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= LEARN PAGE ================= -->
+<div class="page" id="page-learn">
+  <div class="wrap">
+    <div class="page-head">
+      <div class="eyebrow">Concepts</div>
+      <h2>Learn</h2>
+      <p class="lede" style="margin-bottom:0;">The ideas behind Vulloy, explained plainly — written for the same reason the app was built: to actually understand this stuff, not just use it.</p>
+    </div>
+
+    <div class="learn-grid">
+      <div class="glass learn-card">
+        <h3>False positive vs. true positive</h3>
+        <p>Think of a motion-sensor alarm. A cat walking by and an actual intruder both trigger the same alarm. The cat is a <strong style="color:var(--cyan);">false positive</strong> — a harmless event that looked suspicious. The intruder is a <strong style="color:var(--amber);">true positive</strong> — a real threat correctly caught. Security tools generate mostly false positives; the entire point of this app is separating the two automatically.</p>
+      </div>
+
+      <div class="glass learn-card">
+        <h3>Why accuracy alone lies</h3>
+        <p>If 90% of alerts are noise, a model that <em>always</em> guesses "noise" scores 90% accuracy — while missing every real threat. That's why Vulloy always reports <strong>recall</strong> (% of real threats actually caught) and <strong>precision</strong> (% of "threat" calls that were right) alongside accuracy. A missed threat is far more costly than an extra false alarm, so recall matters most here.</p>
+      </div>
+
+      <div class="glass learn-card">
+        <h3>Precision, recall &amp; F1 — the formulas</h3>
+        <p class="mono" style="font-size:12.5px; line-height:2; color:var(--silver);">
+          Precision = TP / (TP + FP)<br>
+          Recall = TP / (TP + FN)<br>
+          F1 = 2 × (Precision × Recall) / (Precision + Recall)
+        </p>
+        <p style="margin-top:10px;">TP = true positive, FP = false positive (false alarm), FN = false negative (missed threat). F1 balances the two into one number when neither alone tells the full story.</p>
+      </div>
+
+      <div class="glass learn-card">
+        <h3>How the classifier actually works</h3>
+        <p>The Train Model page runs real <strong>logistic regression</strong>: every alert becomes a vector of numbers (the 14 features), each multiplied by a learned weight, summed, and squashed through a sigmoid curve into a 0–1 probability. <strong>Gradient descent</strong> nudges every weight, epoch by epoch, in the direction that reduces prediction error — the loss curve you see is that error shrinking in real time.</p>
+      </div>
+
+      <div class="glass learn-card">
+        <h3>Why two layers (rules + ML)?</h3>
+        <p>Rules are instant, free, and fully explainable — perfect for obvious cases ("this exact signature fired 800 times, always harmless"). Machine learning handles the fuzzy cases rules can't anticipate. Real security tools combine both for the same reason: explainability where possible, learned judgment where necessary.</p>
+      </div>
+
+      <div class="glass learn-card">
+        <h3>Reading the Alert Detail view</h3>
+        <p>Click any row in the Alert Explorer. For rule-decided alerts, you'll see the exact plain-English condition that fired. For ML-decided alerts, you'll see each feature's real contribution to that specific prediction — amber bars pushed it toward "threat," cyan bars pushed it toward "noise." This is the same math the model used, not a simplified approximation.</p>
+      </div>
+    </div>
+
+    <div class="eyebrow" style="margin-top:48px;">Vulnerability categories</div>
+    <h2 style="margin-bottom:20px;">What the scanner looks for</h2>
+    <div class="learn-glossary">
+      <div class="glass glossary-row"><span class="pill red">Critical</span><div><h3>SQL Injection</h3><p>Malicious input designed to manipulate a database query — e.g. <span class="mono">' OR '1'='1</span> tricks a login check into always succeeding. Fixed with parameterized queries, never string-concatenated SQL.</p></div></div>
+      <div class="glass glossary-row"><span class="pill amber">High</span><div><h3>Cross-Site Scripting (XSS)</h3><p>Injecting a script that runs in another user's browser, often to steal session cookies. Fixed by encoding output and using a strict Content-Security-Policy.</p></div></div>
+      <div class="glass glossary-row"><span class="pill red">Critical</span><div><h3>Command Injection</h3><p>Input that tricks an application into running OS commands it shouldn't (e.g. <span class="mono">; cat /etc/shadow</span>). Fixed by never passing user input to a shell.</p></div></div>
+      <div class="glass glossary-row"><span class="pill amber">High</span><div><h3>Path Traversal</h3><p>Using <span class="mono">../</span> sequences to escape an intended folder and read arbitrary files. Fixed by validating paths against an allowlist.</p></div></div>
+      <div class="glass glossary-row"><span class="pill yellow">Medium</span><div><h3>Open Redirect</h3><p>A redirect parameter pointed at an attacker's site, often used in phishing links that start on a trusted domain. Fixed by allowlisting redirect targets.</p></div></div>
+      <div class="glass glossary-row"><span class="pill amber">High</span><div><h3>NoSQL Injection</h3><p>Operators like <span class="mono">$ne</span> or <span class="mono">$where</span> smuggled into a query object to bypass authentication logic in document databases. Fixed by strict input type-checking.</p></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= CONTACT PAGE ================= -->
+<div class="page" id="page-contact">
+  <div class="wrap">
+    <div class="page-head">
+      <div class="eyebrow">Get in touch</div>
+      <h2>Contact</h2>
+      <p class="lede" style="margin-bottom:0;">Questions, feedback, or found a bug in Vulloy? Reach out through any of the channels below.</p>
+    </div>
+
+    <div class="glass contact-hero">
+      <div class="contact-avatar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:28px;height:28px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <div>
+        <h3 style="font-size:20px; margin-bottom:6px;">Feedback welcome</h3>
+        <p style="font-size:13.5px; color:var(--silver); max-width:520px; line-height:1.6;">
+          Vulloy is an independent learning project. If something's broken, confusing, or you just want to say hi, use any of the channels below.
+        </p>
+      </div>
+    </div>
+
+    <div class="contact-grid" style="grid-template-columns:repeat(3,1fr);">
+      <a class="glass contact-card" href="mailto:rajkamaljadapalli@gmail.com?subject=Vulloy%20feedback" rel="noopener">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/></svg></div>
+        <div><h3>Email</h3><p>rajkamaljadapalli@gmail.com</p></div>
+      </a>
+      <a class="glass contact-card" href="https://github.com/Raju-565613" target="_blank" rel="noopener">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></div>
+        <div><h3>GitHub</h3><p>github.com/Raju-565613</p></div>
+      </a>
+      <div class="glass contact-card" style="cursor:default;">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+        <div><h3>Response time</h3><p>Usually within a couple of days</p></div>
+      </div>
+    </div>
+
+    <div class="glass" style="padding:26px 28px; margin-top:20px;">
+      <h3 style="margin-bottom:6px;">Report a bug in Vulloy</h3>
+      <p style="font-size:12.5px; color:var(--silver); margin-bottom:16px;">Short summary and what happened is enough — no need to format anything.</p>
+      <a class="btn" href="mailto:rajkamaljadapalli@gmail.com?subject=Vulloy%20bug%20report&body=What%20happened%3A%0A%0ASteps%20to%20reproduce%3A%0A%0A" rel="noopener">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/></svg>
+        Email a bug report
+      </a>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap footer-wrap">
+    <div>
+      <span class="mono" style="font-size:12px; color:var(--silver-dim); display:block; margin-bottom:12px;">Vulloy — an independent learning project. Runs entirely client-side, no data leaves your browser.</span>
+      <div class="stack-chips">
+        <span class="chip">Vanilla JS</span><span class="chip">Real gradient descent</span><span class="chip">Zero backend</span>
+      </div>
+    </div>
+    <div class="social-pills">
+      <a class="social-pill" href="https://in.linkedin.com/in/raj-kamal-jadapalli-56b7a5298" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.03-1.85-3.03-1.85 0-2.14 1.45-2.14 2.94v5.66H9.36V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+        LinkedIn
+      </a>
+      <a class="social-pill" href="https://x.com/Rajkama_j" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 2H22l-7.2 8.2L23.3 22h-6.6l-5.2-6.8L5.6 22H2.4l7.7-8.8L1 2h6.8l4.7 6.2L18.9 2zm-1.2 18h1.8L7.4 4H5.5l12.2 16z"/></svg>
+        X
+      </a>
+      <a class="social-pill" href="https://www.instagram.com/raj_kamal__r.j/?hl=en" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1"/></svg>
+        Instagram
+      </a>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="copyright-bar">
+      <span class="mono">© 2026 VULLOY</span>
+      <span class="copyright-dot">·</span>
+      <span>Alert triage, refined.</span>
+      <span class="copyright-dot">·</span>
+      <span>Built for learning, not production.</span>
+      <span class="copyright-dot">·</span>
+      <span>No data ever leaves this browser.</span>
+    </div>
+  </div>
+</footer>
+
+<div id="toast"></div>
+
+<div id="consentModal" style="display:none; position:fixed; inset:0; z-index:300; align-items:center; justify-content:center; background:rgba(5,6,7,0.7); backdrop-filter:blur(4px);">
+  <div class="glass" style="max-width:480px; width:90%; padding:32px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+      <svg style="width:24px;height:24px;color:var(--amber);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <h3 style="font-size:18px;">Use your own data?</h3>
+    </div>
+    <p style="font-size:13.5px; color:var(--silver); line-height:1.65; margin-bottom:14px;">
+      You can optionally upload a CSV of real alerts or logs you have, and Vulloy will run the same rule engine and trained classifier against it — instead of the synthetic demo data.
+    </p>
+    <ul style="font-size:12.5px; color:var(--silver); line-height:1.8; margin:0 0 20px 18px;">
+      <li>Your file is parsed entirely in this browser tab.</li>
+      <li>Nothing is uploaded to any server — Vulloy has no backend.</li>
+      <li>You can switch back to synthetic data at any time.</li>
+      <li>Vulloy cannot and does not access your device, files, or network on its own — you choose exactly what to upload.</li>
+    </ul>
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button class="btn" id="consentCancelBtn" style="border-color:var(--border);">Cancel</button>
+      <button class="btn" id="consentAcceptBtn" style="border-color:var(--cyan-line);">I understand, continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="alertDetailModal" style="display:none; position:fixed; inset:0; z-index:300; align-items:center; justify-content:center; background:rgba(5,6,7,0.7); backdrop-filter:blur(4px);">
+  <div class="glass" style="max-width:560px; width:92%; padding:0; max-height:82vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:22px 26px; border-bottom:1px solid var(--border);">
+      <div>
+        <div class="eyebrow" style="margin-bottom:4px;">Alert detail</div>
+        <h3 id="detailAlertId" style="font-size:18px;" class="mono">—</h3>
+      </div>
+      <button class="btn" id="detailCloseBtn" style="padding:8px 12px; border-color:var(--border);" aria-label="Close">
+        <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="padding:22px 26px; overflow-y:auto;">
+      <div id="detailVerdictRow" style="margin-bottom:20px;"></div>
+      <h3 style="font-size:12.5px; text-transform:uppercase; letter-spacing:0.05em; color:var(--silver-dim); margin-bottom:10px;">Raw feature values</h3>
+      <table class="report-table" style="margin-bottom:22px;"><tbody id="detailFeaturesBody"></tbody></table>
+      <h3 style="font-size:12.5px; text-transform:uppercase; letter-spacing:0.05em; color:var(--silver-dim); margin-bottom:10px;">Why this decision</h3>
+      <div id="detailExplanation"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CORE LOGIC (verified independently in Node before integration)
+   ============================================================ */
+function gaussian(mean, std){ const u=1-Math.random(), v=Math.random(); return mean+Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)*std; }
+function exponential(mean){ return -Math.log(1-Math.random())*mean; }
+function weightedChoice(arr, weights){ const r=Math.random(); let sum=0; for(let i=0;i<arr.length;i++){ sum+=weights[i]; if(r<=sum) return arr[i]; } return arr[arr.length-1]; }
+
+function generateAlerts(n){
+  const alerts=[];
+  for(let i=0;i<n;i++){
+    const isAttack = Math.random()<0.35;
+    let internal = Math.random()<0.6;
+    let pps,dur,port,severity,prior;
+    if(isAttack){
+      pps=Math.max(1,gaussian(2200,1800)); dur=Math.max(1,exponential(250));
+      port=weightedChoice([21,23,3389,4444,6667,8080,80,443],[.15,.12,.13,.15,.1,.1,.15,.1]);
+      severity=weightedChoice(['Low','Medium','High','Critical'],[.15,.25,.3,.3]);
+      internal=Math.random()<0.30; prior=Math.floor(Math.random()*150);
+    } else {
+      pps=Math.max(1,gaussian(500,700)); dur=Math.max(1,exponential(600));
+      port=weightedChoice([80,443,22,3306,445,21,8080],[.3,.25,.15,.1,.1,.05,.05]);
+      severity=weightedChoice(['Low','Medium','High'],[.55,.35,.10]); prior=Math.floor(Math.random()*900);
+    }
+    alerts.push({ id:'ALERT-'+String(i).padStart(5,'0'), internal, port, protocol:Math.random()<0.85?'TCP':'UDP',
+      pps:+pps.toFixed(1), dur:+dur.toFixed(1), severity, prior, hour:Math.floor(Math.random()*24), label:isAttack?'True Positive':'False Positive' });
+  }
+  return alerts;
+}
+
+function applyRule(a){
+  if(a.prior>500 && a.severity==='Low') return 'False Positive';
+  if(a.prior<5 && a.severity==='Critical' && a.pps>3000) return 'True Positive';
+  if([4444,6667].includes(a.port) && !a.internal && a.dur<100) return 'True Positive';
+  if(a.internal && [443,22,3306].includes(a.port) && a.dur>500 && a.prior>300) return 'False Positive';
+  return null;
+}
+function explainRule(a){
+  if(a.prior>500 && a.severity==='Low') return 'This exact signature has fired '+a.prior+' times before at Low severity — a classic well-known, harmless pattern.';
+  if(a.prior<5 && a.severity==='Critical' && a.pps>3000) return 'Nearly unseen before (only '+a.prior+' prior fires), Critical severity, and an unusually high packet rate ('+a.pps.toFixed(0)+'/s) — novelty combined with urgency.';
+  if([4444,6667].includes(a.port) && !a.internal && a.dur<100) return 'Hit port '+a.port+' (a known backdoor/malware port) from an external source in a short burst ('+a.dur.toFixed(1)+'ms) — a classic malicious fingerprint.';
+  if(a.internal && [443,22,3306].includes(a.port) && a.dur>500 && a.prior>300) return 'Internal traffic on a routine business port ('+a.port+'), long-lived ('+a.dur.toFixed(0)+'ms), recurring '+a.prior+' times — consistent with normal operations.';
+  return null;
+}
+
+const FEATURE_NAMES = [
+  'Packets/sec','Flow duration','Prior alert count','Severity score','Internal source','Risky port',
+  'Protocol (TCP)','Hour of day','Off-hours activity','Business hours',
+  'Port risk category','Estimated flow volume','Packet rate density','Severity/recurrence ratio'
+];
+function extractRawFeatures(a){
+  const sevMap={Low:0,Medium:1,High:2,Critical:3};
+  const portRisky=[21,23,3389,4444,6667,8080].includes(a.port)?1:0;
+  const protocolTCP = a.protocol==='TCP' ? 1:0;
+  const offHours = (a.hour<6 || a.hour>=22) ? 1:0;
+  const businessHours = (a.hour>=9 && a.hour<=18) ? 1:0;
+  const portRiskCategory = [4444,6667].includes(a.port) ? 2 : [21,23,3389].includes(a.port) ? 1 : 0;
+  const estimatedVolume = (a.pps * a.dur)/1000;
+  const rateDensity = a.pps/(a.dur+1);
+  const sevScore = sevMap[a.severity];
+  const severityRecurrenceRatio = sevScore/(a.prior+1);
+  return [a.pps,a.dur,a.prior,sevScore,a.internal?1:0,portRisky, protocolTCP,a.hour,offHours,businessHours, portRiskCategory,estimatedVolume,rateDensity,severityRecurrenceRatio];
+}
+function sigmoid(z){ return 1/(1+Math.exp(-z)); }
+
+function trainLogisticRegression(alerts, {epochs=150, lr=0.1, l2=0.001, splitRatio=0.8, featureIndices=null}={}){
+  const allFeatures = alerts.map(extractRawFeatures);
+  const idxList = featureIndices && featureIndices.length ? featureIndices : allFeatures[0].map((_,i)=>i);
+  const X_raw = allFeatures.map(row => idxList.map(i => row[i]));
+  const y = alerts.map(a=>a.label==='True Positive'?1:0);
+  const n = X_raw.length, nFeat = X_raw[0].length;
+  const idx=[...Array(n).keys()];
+  for(let i=idx.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [idx[i],idx[j]]=[idx[j],idx[i]]; }
+  const splitPoint = Math.floor(n*splitRatio);
+  const trainIdx = idx.slice(0,splitPoint), testIdx = idx.slice(splitPoint);
+  const mean=new Array(nFeat).fill(0), std=new Array(nFeat).fill(0);
+  trainIdx.forEach(i=>{ X_raw[i].forEach((v,j)=>mean[j]+=v); });
+  mean.forEach((m,j)=>mean[j]=m/trainIdx.length);
+  trainIdx.forEach(i=>{ X_raw[i].forEach((v,j)=>std[j]+=(v-mean[j])**2); });
+  std.forEach((s,j)=>std[j]=Math.sqrt(s/trainIdx.length)||1);
+  const normalize=(raw)=>raw.map((v,j)=>(v-mean[j])/std[j]);
+  const X = X_raw.map(normalize);
+  const X_train=trainIdx.map(i=>X[i]), y_train=trainIdx.map(i=>y[i]);
+  const X_test=testIdx.map(i=>X[i]), y_test=testIdx.map(i=>y[i]);
+  let w=new Array(nFeat).fill(0), b=0;
+  const history=[];
+  for(let epoch=0; epoch<epochs; epoch++){
+    const preds = X_train.map(row=>sigmoid(row.reduce((s,v,j)=>s+v*w[j],0)+b));
+    const errors = preds.map((p,i)=>p-y_train[i]);
+    const gradW=new Array(nFeat).fill(0);
+    for(let i=0;i<X_train.length;i++){ for(let j=0;j<nFeat;j++){ gradW[j]+=errors[i]*X_train[i][j]; } }
+    for(let j=0;j<nFeat;j++){ gradW[j]=gradW[j]/X_train.length + l2*w[j]; }
+    const gradB = errors.reduce((s,e)=>s+e,0)/X_train.length;
+    for(let j=0;j<nFeat;j++){ w[j]-=lr*gradW[j]; }
+    b-=lr*gradB;
+    const eps=1e-9;
+    const loss = -preds.reduce((s,p,i)=>s+(y_train[i]*Math.log(p+eps)+(1-y_train[i])*Math.log(1-p+eps)),0)/preds.length;
+    const trainAcc = preds.filter((p,i)=>(p>=0.5?1:0)===y_train[i]).length/preds.length;
+    history.push({ epoch:epoch+1, loss:+loss.toFixed(4), trainAcc:+(trainAcc*100).toFixed(2) });
+  }
+  const testPreds = X_test.map(row=>sigmoid(row.reduce((s,v,j)=>s+v*w[j],0)+b));
+  const testPredLabels = testPreds.map(p=>p>=0.5?1:0);
+  let tp=0,fp=0,tn=0,fn=0;
+  testPredLabels.forEach((pred,i)=>{ const actual=y_test[i];
+    if(pred===1&&actual===1) tp++; else if(pred===1&&actual===0) fp++; else if(pred===0&&actual===0) tn++; else fn++; });
+  const accuracy=(tp+tn)/(tp+tn+fp+fn);
+  const precision=tp+fp>0?tp/(tp+fp):0;
+  const recall=tp+fn>0?tp/(tp+fn):0;
+  const f1=(precision+recall)>0?2*precision*recall/(precision+recall):0;
+  return { trained:true, weights:w, bias:b, normStats:{mean,std}, history, nTrain:trainIdx.length, nTest:testIdx.length,
+    epochs, lr, l2, splitRatio, featureIndices: idxList, featureNames: idxList.map(i=>FEATURE_NAMES[i]),
+    testMetrics:{ accuracy:+(accuracy*100).toFixed(2), precision:+(precision*100).toFixed(2), recall:+(recall*100).toFixed(2), f1:+(f1*100).toFixed(2), confusionMatrix:{tp,fp,tn,fn} },
+    trainedAt: new Date() };
+}
+
+function mlPredict(model, alert){
+  if(!model || !model.trained) return null;
+  const allRaw = extractRawFeatures(alert);
+  const raw = model.featureIndices.map(i => allRaw[i]);
+  const norm = raw.map((v,j)=>(v-model.normStats.mean[j])/model.normStats.std[j]);
+  const z = norm.reduce((s,v,j)=>s+v*model.weights[j],0)+model.bias;
+  return sigmoid(z);
+}
+
+function explainMLDecision(model, alert){
+  if(!model || !model.trained) return [];
+  const allRaw = extractRawFeatures(alert);
+  const raw = model.featureIndices.map(i => allRaw[i]);
+  const norm = raw.map((v,j)=>(v-model.normStats.mean[j])/model.normStats.std[j]);
+  const contributions = norm.map((v,j)=>({ name: model.featureNames[j], contribution: v*model.weights[j] }));
+  contributions.sort((a,b)=> Math.abs(b.contribution) - Math.abs(a.contribution));
+  return contributions;
+}
+
+function runPipeline(alerts, model, threshold){
+  return alerts.map(a=>{
+    const rule = applyRule(a);
+    if(rule){ return Object.assign({},a,{ruleDecision:rule, finalDecision:rule, decidedBy:'Rule Engine', confidence:1, mlProb:null}); }
+    const prob = mlPredict(model, a);
+    if(prob===null){ return Object.assign({},a,{ruleDecision:null, finalDecision:'Unscored', decidedBy:'Pending Training', confidence:null, mlProb:null}); }
+    const final = prob>=threshold ? 'True Positive':'False Positive';
+    const confidence = final==='True Positive' ? prob : 1-prob;
+    return Object.assign({},a,{ruleDecision:null, finalDecision:final, decidedBy:'ML Model', confidence:+confidence.toFixed(3), mlProb:+prob.toFixed(4)});
+  });
+}
+
+/* ============================================================
+   REAL DATA UPLOAD (CSV parsing — tested independently before integration)
+   ============================================================ */
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0; i<text.length; i++){
+    const c = text[i], next = text[i+1];
+    if(inQuotes){
+      if(c === '"' && next === '"'){ field += '"'; i++; }
+      else if(c === '"'){ inQuotes = false; }
+      else { field += c; }
+    } else {
+      if(c === '"'){ inQuotes = true; }
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\r'){ /* skip */ }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else { field += c; }
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || r[0] !== '');
+}
+const COLUMN_ALIASES = {
+  internal: ['internal','is_internal','src_internal','source_internal'],
+  port: ['port','dest_port','destination_port','dst_port'],
+  protocol: ['protocol','proto'],
+  pps: ['packets_per_sec','pps','packet_rate','packets_sec'],
+  dur: ['flow_duration_ms','duration','flow_duration','dur','duration_ms'],
+  severity: ['severity','priority','risk_level'],
+  prior: ['prior_alert_count','prior_count','prior','historical_count','recurrence_count'],
+  hour: ['hour','hour_of_day'],
+  label: ['label','classification','verdict','ground_truth','true_label']
+};
+const REQUIRED_CSV_COLS = ['port','protocol','pps','dur','severity','prior'];
+function mapColumns(headerRow){
+  const normalized = headerRow.map(h => h.trim().toLowerCase());
+  const mapping = {};
+  Object.keys(COLUMN_ALIASES).forEach(key => {
+    const idx = normalized.findIndex(h => COLUMN_ALIASES[key].includes(h));
+    if(idx !== -1) mapping[key] = idx;
+  });
+  return mapping;
+}
+function buildAlertsFromCSV(text){
+  const rows = parseCSV(text);
+  if(rows.length < 2) return { error: 'File appears empty or has no data rows.' };
+  const headerRow = rows[0];
+  const mapping = mapColumns(headerRow);
+  const missing = REQUIRED_CSV_COLS.filter(key => !(key in mapping));
+  if(missing.length){
+    return { error: 'Missing required column(s): ' + missing.join(', ') + '. Found headers: ' + headerRow.join(', ') };
+  }
+  const dataRows = rows.slice(1);
+  const alerts = [], warnings = [];
+  dataRows.forEach((r, i) => {
+    if(r.length < headerRow.length - 2) return;
+    const get = (key, fallback) => mapping[key] !== undefined ? r[mapping[key]] : fallback;
+    const rawInternal = get('internal', 'false');
+    const internal = ['true','1','yes','internal'].includes(String(rawInternal).trim().toLowerCase());
+    const port = parseInt(get('port'), 10);
+    const protocol = (get('protocol','TCP')||'TCP').trim().toUpperCase();
+    const pps = parseFloat(get('pps'));
+    const dur = parseFloat(get('dur'));
+    let severity = (get('severity','Medium')||'Medium').trim();
+    severity = ['Low','Medium','High','Critical'].find(s=>severity.toLowerCase().startsWith(s.toLowerCase())) || 'Medium';
+    const prior = parseInt(get('prior'), 10);
+    const hour = mapping.hour !== undefined ? parseInt(get('hour'),10) : Math.floor(Math.random()*24);
+    if(isNaN(port) || isNaN(pps) || isNaN(dur) || isNaN(prior)){
+      warnings.push('Row '+(i+2)+' skipped: non-numeric value in a required numeric column.');
+      return;
+    }
+    let label = null;
+    if('label' in mapping){
+      const rawLabel = String(get('label','')).trim().toLowerCase();
+      if(['true positive','true','1','malicious','attack','threat'].includes(rawLabel)) label = 'True Positive';
+      else if(['false positive','false','0','benign','normal','noise'].includes(rawLabel)) label = 'False Positive';
+      else if(rawLabel) warnings.push('Row '+(i+2)+': unrecognized label "'+get('label','')+'", treated as unlabeled.');
+    }
+    alerts.push({ id:'REAL-'+String(i).padStart(5,'0'), internal, port, protocol, pps, dur, severity, prior, hour, label });
+  });
+  return { alerts, warnings, hasLabels: alerts.some(a=>a.label!==null), totalRows: dataRows.length, parsedRows: alerts.length };
+}
+
+const VULN_PATTERNS = [
+  { id:'sqli', name:'SQL Injection', severity:'critical',
+    patterns:[/(\%27)|(\')|(\-\-)|(\%23)|(#)/i, /\bunion\b[\s\S]{0,40}\bselect\b/i, /\bor\b\s+['"]?\d+['"]?\s*=\s*['"]?\d+['"]?/i, /\bdrop\b\s+\btable\b/i, /\binsert\b\s+\binto\b/i, /\bexec(\s|\+)+(s|x)p\w+/i],
+    tip:'Use parameterized queries / prepared statements. Never concatenate user input directly into SQL strings.' },
+  { id:'xss', name:'Cross-Site Scripting (XSS)', severity:'high',
+    patterns:[/<script[\s\S]*?>/i, /on\w+\s*=\s*["'][^"']*["']/i, /javascript:/i, /document\.cookie/i],
+    tip:'Encode output for the correct context (HTML, attribute, JS) and apply a strict Content-Security-Policy.' },
+  { id:'cmdi', name:'Command Injection', severity:'critical',
+    patterns:[/;\s*(ls|cat|whoami|rm|wget|curl|nc|bash|sh)\b/i, /\|\s*(ls|cat|whoami|nc)\b/i, /\`[^\`]+\`/, /\$\([^)]+\)/],
+    tip:'Avoid shelling out to the OS with user input. Use safe library APIs instead of raw shell commands.' },
+  { id:'path', name:'Path Traversal', severity:'high',
+    patterns:[/\.\.\//, /\.\.\\\\/, /%2e%2e%2f/i, /\/etc\/passwd/i],
+    tip:'Normalize and validate file paths against an allowlist; never build paths directly from user input.' },
+  { id:'redirect', name:'Open Redirect', severity:'medium',
+    patterns:[/[?&]?(redirect|url|next|return)=https?:\/\//i],
+    tip:'Validate redirect targets against an allowlist of internal paths.' },
+  { id:'nosqli', name:'NoSQL Injection', severity:'high',
+    patterns:[/\$where["']?\s*:/i, /\$gt["']?\s*:/i, /\$ne["']?\s*:/i, /\$regex["']?\s*:/i],
+    tip:'Type-check and sanitize inputs before using them inside NoSQL query objects.' }
+];
+function scanInput(text){
+  const findings=[];
+  VULN_PATTERNS.forEach(cat=>{
+    let bestMatch = null;
+    cat.patterns.forEach(re=>{
+      const m = text.match(re);
+      if(m && (!bestMatch || m[0].length > bestMatch.length)){ bestMatch = m[0]; }
+    });
+    if(bestMatch){ findings.push({category:cat.name, severity:cat.severity, match:bestMatch.slice(0,80), tip:cat.tip, id:cat.id}); }
+  });
+  return findings;
+}
+
+/* ============================================================
+   APPLICATION STATE
+   ============================================================ */
+let ALERTS = [];
+let RESULTS = [];
+let MODEL = null;
+let RUN_HISTORY = [];
+let LAST_SCAN = null;
+let DATA_MODE = 'synthetic'; // 'synthetic' | 'real'
+let REAL_DATA_INFO = null; // { filename, totalRows, parsedRows, hasLabels }
+let tradeoffChart, decidedByChart, verdictChart, lossChart;
+const fmt = n => Number(n).toLocaleString();
+const fmtPct = n => n.toFixed(1)+'%';
+
+function toast(title, sub){
+  const el = document.createElement('div');
+  el.className = 'toast-item glass';
+  el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><div><p>'+title+'</p>'+(sub?'<span>'+sub+'</span>':'')+'</div>';
+  document.getElementById('toast').appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }, 3200);
+}
+
+/* ============================================================
+   PAGE NAVIGATION
+   ============================================================ */
+document.querySelectorAll('.pagenav button[data-page]').forEach(btn=>{
+  btn.addEventListener('click', ()=> gotoPage(btn.dataset.page));
+});
+document.querySelectorAll('[data-goto]').forEach(el=>{
+  el.addEventListener('click', ()=> gotoPage(el.dataset.goto));
+});
+function gotoPage(name){
+  const target = document.getElementById('page-'+name);
+  if(!target) return; // defensive guard -- ignore invalid/unrelated triggers
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.pagenav button[data-page]').forEach(b=>b.classList.remove('active'));
+  target.classList.add('active');
+  const navBtn = document.querySelector('.pagenav button[data-page="'+name+'"]');
+  if(navBtn) navBtn.classList.add('active');
+  window.scrollTo({top:0, behavior:'instant'});
+}
+
+/* ============================================================
+   DASHBOARD RENDERING
+   ============================================================ */
+function computeStats(results){
+  const total = results.length;
+  const scored = results.filter(r=>r.finalDecision!=='Unscored');
+  const filtered = results.filter(r=>r.finalDecision==='False Positive').length;
+  const unscored = results.filter(r=>r.finalDecision==='Unscored').length;
+  const remaining = total - filtered;
+  const realAttacks = results.filter(r=>r.label==='True Positive');
+  const missed = realAttacks.filter(r=>r.finalDecision==='False Positive');
+  const realBenign = results.filter(r=>r.label==='False Positive');
+  const extraAlarms = realBenign.filter(r=>r.finalDecision==='True Positive');
+  const correctScored = scored.filter(r=>r.finalDecision===r.label).length;
+  return {
+    total, filtered, remaining, unscored,
+    missed: missed.length, missedPct: realAttacks.length ? (missed.length/realAttacks.length*100) : 0,
+    extra: extraAlarms.length,
+    recall: realAttacks.length ? ((realAttacks.length-missed.length)/realAttacks.length*100) : 0,
+    accuracy: scored.length ? (correctScored/scored.length*100) : 0,
+    decidedByRules: results.filter(r=>r.decidedBy==='Rule Engine').length,
+    decidedByML: results.filter(r=>r.decidedBy==='ML Model').length,
+  };
+}
+
+function renderDashboard(){
+  const threshold = parseFloat(document.getElementById('threshSlider').value);
+  RESULTS = runPipeline(ALERTS, MODEL, threshold);
+  const s = computeStats(RESULTS);
+
+  document.getElementById('mlBadge').textContent = MODEL && MODEL.trained ? 'trained' : 'untrained';
+  document.getElementById('mlBadge').className = 'tiny-badge ' + (MODEL && MODEL.trained ? 'trained':'untrained');
+  document.getElementById('untrainedBanner').style.display = s.unscored>0 ? 'flex':'none';
+  document.getElementById('unscoredCount').textContent = fmt(s.unscored);
+  document.getElementById('labPanel').classList.toggle('disabled', !(MODEL && MODEL.trained));
+
+  document.getElementById('kpiTotal').textContent = fmt(s.total);
+  document.getElementById('kpiFiltered').textContent = fmt(s.filtered);
+  document.getElementById('kpiFilteredSub').textContent = fmtPct(s.filtered/s.total*100)+' of total volume';
+  document.getElementById('kpiRemaining').textContent = fmt(s.remaining);
+  document.getElementById('kpiRemainingSub').textContent = s.unscored>0 ? (fmt(s.unscored)+' unscored') : 'requires review';
+  document.getElementById('kpiMissed').textContent = fmt(s.missed);
+  document.getElementById('kpiMissedSub').textContent = fmtPct(s.missedPct)+' of real attacks';
+
+  document.getElementById('stageTotal').textContent = fmt(s.total);
+  document.getElementById('stageRules').textContent = fmt(s.decidedByRules);
+  document.getElementById('stageML').textContent = fmt(s.decidedByML);
+  document.getElementById('stageOut').textContent = fmt(s.total - s.unscored);
+
+  document.getElementById('threshVal').textContent = threshold.toFixed(2);
+  document.getElementById('threshSlider').style.setProperty('--fill', ((threshold-0.05)/(0.95-0.05)*100)+'%');
+  document.getElementById('labMissed').textContent = fmt(s.missed);
+  document.getElementById('labExtra').textContent = fmt(s.extra);
+  document.getElementById('labRecall').textContent = fmtPct(s.recall);
+  document.getElementById('labAccuracy').textContent = fmtPct(s.accuracy);
+
+  renderMissedTable();
+  renderExplorer();
+  try{ renderDonuts(s); }catch(e){ console.error('Donut chart error:', e); }
+  try{ renderTradeoffChart(); }catch(e){ console.error('Tradeoff chart error:', e); }
+}
+
+function renderMissedTable(){
+  const rows = RESULTS.filter(r=>r.label==='True Positive' && r.finalDecision==='False Positive').sort((a,b)=>b.confidence-a.confidence).slice(0,25);
+  const body = document.getElementById('missedBody'), table = document.getElementById('missedTable'), empty = document.getElementById('missedEmpty');
+  if(rows.length===0){ table.style.display='none'; empty.style.display='block'; return; }
+  table.style.display='table'; empty.style.display='none';
+  body.innerHTML = rows.map(r=>'<tr class="clickable-row" data-id="'+r.id+'"><td class="mono-cell">'+r.id+'</td><td><span class="pill '+(r.severity==='Critical'?'red':r.severity==='High'?'amber':'gray')+'">'+r.severity+'</span></td><td class="mono-cell">'+r.pps.toFixed(0)+'</td><td class="mono-cell">'+r.port+'</td><td class="mono-cell">'+r.prior+'</td><td>'+r.decidedBy+'</td><td class="mono-cell">'+(r.confidence*100).toFixed(0)+'%</td></tr>').join('');
+}
+
+function renderExplorer(){
+  const search = document.getElementById('searchInput').value.trim().toUpperCase();
+  const decisionFilter = document.getElementById('decisionFilter').value;
+  const deciderFilter = document.getElementById('deciderFilter').value;
+  let filtered = RESULTS;
+  if(search) filtered = filtered.filter(r=>r.id.includes(search));
+  if(decisionFilter!=='all') filtered = filtered.filter(r=>r.finalDecision===decisionFilter);
+  if(deciderFilter!=='all') filtered = filtered.filter(r=>r.decidedBy===deciderFilter);
+  document.getElementById('explorerCount').textContent = fmt(filtered.length)+' of '+fmt(RESULTS.length)+' alerts match';
+  document.getElementById('explorerBody').innerHTML = filtered.slice(0,60).map(r=>{
+    const verdictPill = r.finalDecision==='Unscored' ? '<span class="pill gray">Pending</span>' : '<span class="pill '+(r.finalDecision==='True Positive'?'amber':'cyan')+'">'+(r.finalDecision==='True Positive'?'Threat':'Noise')+'</span>';
+    const confDisplay = r.confidence===null ? '<span style="color:var(--silver-dim);">—</span>' : '<span class="conf-bar"><span class="conf-bar-fill" style="width:'+(r.confidence*100).toFixed(0)+'%"></span></span>'+(r.confidence*100).toFixed(0)+'%';
+    return '<tr class="clickable-row" data-id="'+r.id+'"><td class="mono-cell">'+r.id+'</td><td>'+(r.internal?'Internal':'External')+'</td><td class="mono-cell">'+r.port+'</td><td class="mono-cell">'+r.protocol+'</td><td>'+r.severity+'</td><td>'+verdictPill+'</td><td>'+r.decidedBy+'</td><td>'+confDisplay+'</td></tr>';
+  }).join('');
+}
+
+function openAlertDetail(id){
+  const row = RESULTS.find(r => r.id === id);
+  if(!row) return;
+  document.getElementById('detailAlertId').textContent = row.id;
+  const verdictLabel = row.finalDecision === 'Unscored' ? 'Pending — model not yet trained' : (row.finalDecision === 'True Positive' ? 'Flagged as threat' : 'Filtered as noise');
+  const verdictColor = row.finalDecision === 'True Positive' ? 'amber' : row.finalDecision === 'False Positive' ? 'cyan' : 'gray';
+  document.getElementById('detailVerdictRow').innerHTML =
+    '<span class="pill '+verdictColor+'" style="font-size:13px; padding:7px 14px;">'+verdictLabel+'</span> '+
+    '<span class="mono" style="font-size:12px; color:var(--silver-dim); margin-left:10px;">decided by '+row.decidedBy+(row.confidence!==null ? ' · '+(row.confidence*100).toFixed(0)+'% confidence' : '')+'</span>';
+
+  const featureRows = [
+    ['Source', row.internal ? 'Internal' : 'External'],
+    ['Destination port', row.port],
+    ['Protocol', row.protocol],
+    ['Packets/sec', row.pps.toFixed(1)],
+    ['Flow duration (ms)', row.dur.toFixed(1)],
+    ['Severity', row.severity],
+    ['Prior alert count', row.prior],
+    ['Hour of day', row.hour !== undefined ? row.hour : '—'],
+    ['Ground truth label', row.label === null ? 'Unlabeled' : row.label],
+  ];
+  document.getElementById('detailFeaturesBody').innerHTML = featureRows.map(([k,v]) =>
+    '<tr><td class="mono-cell" style="color:var(--silver-dim); width:170px;">'+k+'</td><td class="mono-cell">'+v+'</td></tr>'
+  ).join('');
+
+  const explanationEl = document.getElementById('detailExplanation');
+  if(row.decidedBy === 'Rule Engine'){
+    const reason = explainRule(row);
+    explanationEl.innerHTML = '<p style="font-size:13px; color:var(--silver); line-height:1.6; padding:14px 16px; background:var(--panel); border-radius:10px; border:1px solid var(--border);">'+(reason || 'A deterministic rule matched this alert.')+'</p>';
+  } else if(row.decidedBy === 'ML Model' && MODEL && MODEL.trained){
+    const contributions = explainMLDecision(MODEL, row).slice(0,6);
+    explanationEl.innerHTML = '<p style="font-size:12px; color:var(--silver-dim); margin-bottom:14px;">Each bar shows how strongly that feature pushed the model toward "threat" (amber, right) or "noise" (cyan, left).</p>' +
+      contributions.map(c => {
+        const pct = Math.min(100, Math.abs(c.contribution) * 22);
+        const cls = c.contribution >= 0 ? 'pos' : 'neg';
+        return '<div class="contrib-row"><div class="contrib-name">'+c.name+'</div><div class="contrib-track"><div class="contrib-mid"></div><div class="contrib-fill '+cls+'" style="width:'+pct+'%"></div></div></div>';
+      }).join('');
+  } else {
+    explanationEl.innerHTML = '<p style="font-size:13px; color:var(--silver-dim);">This alert has not been scored yet — train the model on the Train Model page to see a decision here.</p>';
+  }
+
+  document.getElementById('alertDetailModal').style.display = 'flex';
+}
+document.getElementById('detailCloseBtn').addEventListener('click', () => {
+  document.getElementById('alertDetailModal').style.display = 'none';
+});
+document.getElementById('alertDetailModal').addEventListener('click', (e) => {
+  if(e.target.id === 'alertDetailModal') document.getElementById('alertDetailModal').style.display = 'none';
+});
+document.getElementById('missedBody').addEventListener('click', (e) => {
+  const row = e.target.closest('tr[data-id]');
+  if(row) openAlertDetail(row.dataset.id);
+});
+document.getElementById('explorerBody').addEventListener('click', (e) => {
+  const row = e.target.closest('tr[data-id]');
+  if(row) openAlertDetail(row.dataset.id);
+});
+
+function renderDonuts(s){
+  const holder1 = document.getElementById('decidedByHolder'), holder2 = document.getElementById('verdictHolder');
+  if(typeof Chart==='undefined'){
+    const msg = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--silver-dim);font-size:12px;text-align:center;padding:16px;">Chart library unavailable —<br>check your internet connection</div>';
+    holder1.innerHTML = msg; holder2.innerHTML = msg;
+    return;
+  }
+  holder1.innerHTML = '<canvas id="decidedByChart"></canvas>';
+  holder2.innerHTML = '<canvas id="verdictChart"></canvas>';
+  const ctx1=document.getElementById('decidedByChart'), ctx2=document.getElementById('verdictChart');
+  const verdictCounts = { 'False Positive': RESULTS.filter(r=>r.finalDecision==='False Positive').length, 'True Positive': RESULTS.filter(r=>r.finalDecision==='True Positive').length };
+  const opts = { cutout:'72%', plugins:{legend:{display:false}, tooltip:{backgroundColor:'#15181c', borderColor:'rgba(255,255,255,0.12)', borderWidth:1, titleFont:{family:'IBM Plex Mono'}, bodyFont:{family:'IBM Plex Mono'}, padding:10}} };
+  decidedByChart = new Chart(ctx1, {type:'doughnut', data:{labels:['Rule engine','ML model'], datasets:[{data:[s.decidedByRules, s.decidedByML], backgroundColor:['#9FA6B0','#4FE8D0'], borderWidth:0}]}, options:opts});
+  verdictChart = new Chart(ctx2, {type:'doughnut', data:{labels:['False positive','True positive'], datasets:[{data:[verdictCounts['False Positive'], verdictCounts['True Positive']], backgroundColor:['#4FE8D0','#FF9B57'], borderWidth:0}]}, options:opts});
+}
+
+function renderTradeoffChart(){
+  const holder = document.getElementById('tradeoffHolder');
+  if(typeof Chart==='undefined' || !MODEL || !MODEL.trained){
+    holder.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--silver-dim);font-size:12px;text-align:center;padding:16px;">'+(!MODEL||!MODEL.trained ? 'Train the model to see the tradeoff curve' : 'Chart library unavailable')+'</div>';
+    return;
+  }
+  const thresholds=[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9];
+  const missedData=[], extraData=[];
+  thresholds.forEach(t=>{ const res=runPipeline(ALERTS, MODEL, t); const s=computeStats(res); missedData.push(s.missed); extraData.push(s.extra); });
+  holder.innerHTML = '<canvas id="tradeoffChart"></canvas>';
+  const canvas = document.getElementById('tradeoffChart');
+  tradeoffChart = new Chart(canvas, { type:'line',
+    data:{ labels:thresholds.map(t=>t.toFixed(1)), datasets:[
+      {label:'Missed threats', data:missedData, borderColor:'#FF9B57', backgroundColor:'rgba(255,155,87,0.12)', fill:true, tension:0.35, pointRadius:3, pointBackgroundColor:'#FF9B57'},
+      {label:'Extra false alarms', data:extraData, borderColor:'#4FE8D0', backgroundColor:'rgba(79,232,208,0.08)', fill:true, tension:0.35, pointRadius:3, pointBackgroundColor:'#4FE8D0'} ]},
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{labels:{color:'#9FA6B0', font:{family:'Inter', size:11}, boxWidth:10, usePointStyle:true}}, tooltip:{backgroundColor:'#15181c', borderColor:'rgba(255,255,255,0.12)', borderWidth:1, titleFont:{family:'IBM Plex Mono'}, bodyFont:{family:'IBM Plex Mono'}, padding:10} },
+      scales:{ x:{grid:{color:'rgba(255,255,255,0.06)'}, ticks:{color:'#666D77', font:{family:'IBM Plex Mono', size:10}}}, y:{grid:{color:'rgba(255,255,255,0.06)'}, ticks:{color:'#666D77', font:{family:'IBM Plex Mono', size:10}}, beginAtZero:true} } } });
+}
+
+/* ============================================================
+   RUN ANALYSIS (regenerates alert batch — verified to change output)
+   ============================================================ */
+/* ============================================================
+   DATA SOURCE: SYNTHETIC vs REAL (consent-gated upload)
+   ============================================================ */
+function updateRunBtnLabel(){
+  const btn = document.getElementById('runBtn');
+  if(DATA_MODE === 'synthetic'){
+    btn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Run analysis';
+  } else {
+    btn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Re-run pipeline';
+  }
+}
+
+document.getElementById('sourceSyntheticBtn').addEventListener('click', function(){
+  DATA_MODE = 'synthetic';
+  document.getElementById('sourceSyntheticBtn').classList.add('active');
+  document.getElementById('sourceRealBtn').classList.remove('active');
+  document.getElementById('uploadPanel').style.display = 'none';
+  document.getElementById('dataSourceDesc').textContent = 'Using synthetic demo data, generated in your browser.';
+  ALERTS = generateAlerts(1200);
+  updateRunBtnLabel();
+  renderDashboard();
+  toast('Switched to synthetic data');
+});
+
+document.getElementById('sourceRealBtn').addEventListener('click', function(){
+  document.getElementById('consentModal').style.display = 'flex';
+});
+document.getElementById('consentCancelBtn').addEventListener('click', function(){
+  document.getElementById('consentModal').style.display = 'none';
+});
+document.getElementById('consentAcceptBtn').addEventListener('click', function(){
+  document.getElementById('consentModal').style.display = 'none';
+  DATA_MODE = 'real';
+  document.getElementById('sourceRealBtn').classList.add('active');
+  document.getElementById('sourceSyntheticBtn').classList.remove('active');
+  document.getElementById('uploadPanel').style.display = 'block';
+  document.getElementById('dataSourceDesc').textContent = 'Waiting for a CSV file to be uploaded.';
+  updateRunBtnLabel();
+  toast('Real data mode enabled', 'Upload a CSV to begin');
+});
+
+document.getElementById('downloadTemplateBtn').addEventListener('click', function(){
+  const headers = ['port','protocol','packets_per_sec','flow_duration_ms','severity','prior_alert_count','internal','label'];
+  const example = [
+    ['443','TCP','120.5','890.2','Low','540','true','False Positive'],
+    ['4444','TCP','5200','12.3','Critical','2','false','True Positive'],
+  ];
+  const csv = 'sep=,\r\n' + [headers.join(','), ...example.map(r=>r.join(','))].join('\r\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='vulloy_upload_template.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+});
+
+document.getElementById('csvFileInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  document.getElementById('uploadStatus').textContent = 'Reading '+file.name+'...';
+  document.getElementById('uploadWarnings').innerHTML = '';
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    const result = buildAlertsFromCSV(evt.target.result);
+    if(result.error){
+      document.getElementById('uploadStatus').textContent = '';
+      document.getElementById('uploadWarnings').innerHTML = '<div class="banner" style="margin-bottom:0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg><p>'+result.error+'</p></div>';
+      toast('Upload failed', 'Check the required columns');
+      return;
+    }
+    if(result.alerts.length === 0){
+      document.getElementById('uploadStatus').textContent = '';
+      document.getElementById('uploadWarnings').innerHTML = '<div class="banner" style="margin-bottom:0;"><p>No valid rows could be parsed from this file.</p></div>';
+      toast('No valid rows found');
+      return;
+    }
+    ALERTS = result.alerts;
+    REAL_DATA_INFO = { filename: file.name, totalRows: result.totalRows, parsedRows: result.parsedRows, hasLabels: result.hasLabels };
+    document.getElementById('uploadStatus').textContent = 'Loaded '+fmt(result.parsedRows)+' of '+fmt(result.totalRows)+' rows from '+file.name+(result.hasLabels ? ' (labeled)' : ' (unlabeled — accuracy stats unavailable)');
+    document.getElementById('dataSourceDesc').textContent = 'Using uploaded data: '+file.name+' ('+fmt(result.parsedRows)+' alerts)';
+    if(result.warnings.length){
+      document.getElementById('uploadWarnings').innerHTML = '<div class="banner" style="margin-bottom:0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg><p>'+result.warnings.length+' row(s) had issues and were skipped. First: '+result.warnings[0]+'</p></div>';
+    }
+    renderDashboard();
+    document.getElementById('lastRunLabel').textContent = 'Loaded: '+new Date().toLocaleTimeString();
+    toast('Real data loaded', result.parsedRows+' alerts ready for triage');
+  };
+  reader.onerror = function(){ toast('Read error', 'Could not read the file'); };
+  reader.readAsText(file);
+});
+
+/* ============================================================
+   RUN ANALYSIS (regenerates synthetic batch, or re-runs pipeline on real data)
+   ============================================================ */
+document.getElementById('runBtn').addEventListener('click', function(){
+  const btn = this;
+  if(DATA_MODE === 'real' && ALERTS.length === 0){ toast('No data loaded', 'Upload a CSV first'); return; }
+  btn.classList.add('spin'); btn.disabled = true;
+  setTimeout(()=>{
+    if(DATA_MODE === 'synthetic'){
+      const n = 900 + Math.floor(Math.random()*700);
+      ALERTS = generateAlerts(n);
+    }
+    renderDashboard();
+    btn.classList.remove('spin'); btn.disabled = false;
+    const now = new Date();
+    document.getElementById('lastRunLabel').textContent = 'Last run: '+now.toLocaleTimeString();
+    toast(DATA_MODE === 'synthetic' ? 'Analysis complete' : 'Pipeline re-run', fmt(ALERTS.length)+' alerts processed');
+  }, 550);
+});
+
+document.getElementById('threshSlider').addEventListener('input', renderDashboard);
+document.getElementById('searchInput').addEventListener('input', renderExplorer);
+document.getElementById('decisionFilter').addEventListener('change', renderExplorer);
+document.getElementById('deciderFilter').addEventListener('change', renderExplorer);
+
+/* ============================================================
+   TRAIN MODEL PAGE
+   ============================================================ */
+document.getElementById('epochsUp').addEventListener('click', function(){
+  const inp = document.getElementById('epochsInput');
+  inp.value = Math.min(500, (parseInt(inp.value)||150) + 10);
+});
+document.getElementById('epochsDown').addEventListener('click', function(){
+  const inp = document.getElementById('epochsInput');
+  inp.value = Math.max(10, (parseInt(inp.value)||150) - 10);
+});
+
+document.getElementById('featSelectAll').addEventListener('click', function(){
+  document.querySelectorAll('.feature-check input[type=checkbox]').forEach(cb => cb.checked = true);
+});
+document.getElementById('featSelectCore').addEventListener('click', function(){
+  document.querySelectorAll('.feature-check input[type=checkbox]').forEach((cb,i) => cb.checked = i < 6);
+});
+
+function populateFeatureChecklist(){
+  const container = document.getElementById('featureChecklist');
+  container.innerHTML = FEATURE_NAMES.map((name,i) => {
+    const isCore = i < 6;
+    return '<div class="feature-check"><input type="checkbox" id="feat_'+i+'" data-idx="'+i+'" checked>'+
+      '<label for="feat_'+i+'">'+name+'</label>'+(isCore ? '<span class="core-tag">core</span>' : '<span class="core-tag">engineered</span>')+'</div>';
+  }).join('');
+}
+populateFeatureChecklist();
+
+function getSelectedFeatureIndices(){
+  return Array.from(document.querySelectorAll('.feature-check input[type=checkbox]:checked')).map(cb => parseInt(cb.dataset.idx));
+}
+
+document.getElementById('trainBtn').addEventListener('click', function(){
+  if(ALERTS.length < 50){ toast('Not enough data', 'Run analysis on the dashboard first'); return; }
+  const featureIndices = getSelectedFeatureIndices();
+  if(featureIndices.length === 0){ toast('Select at least one feature', 'Nothing chosen to train on'); return; }
+  const btn = this;
+  btn.classList.add('spin'); btn.disabled = true;
+  document.getElementById('trainStatus').textContent = 'Training in progress...';
+
+  setTimeout(()=>{
+    const epochs = Math.max(10, Math.min(500, parseInt(document.getElementById('epochsInput').value) || 150));
+    const lr = parseFloat(document.getElementById('lrSelect').value);
+    const splitRatio = parseFloat(document.getElementById('splitSelect').value);
+    const l2 = parseFloat(document.getElementById('l2Select').value);
+
+    MODEL = trainLogisticRegression(ALERTS, { epochs, lr, l2, splitRatio, featureIndices });
+
+    RUN_HISTORY.unshift(MODEL);
+    if(RUN_HISTORY.length > 10) RUN_HISTORY.pop();
+
+    renderLossChart(MODEL.history);
+    renderTrainResults(MODEL);
+    renderModelReport(MODEL);
+    renderRunHistory();
+
+    btn.classList.remove('spin'); btn.disabled = false;
+    document.getElementById('trainStatus').textContent = 'Trained on '+fmt(MODEL.nTrain)+' samples, tested on '+fmt(MODEL.nTest)+' — '+MODEL.trainedAt.toLocaleTimeString();
+    toast('Model trained', MODEL.testMetrics.accuracy+'% test accuracy over '+epochs+' epochs');
+
+    renderDashboard();
+  }, 120);
+});
+
+function renderRunHistory(){
+  const section = document.getElementById('runHistorySection');
+  if(RUN_HISTORY.length === 0){ section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  document.getElementById('runHistoryBody').innerHTML = RUN_HISTORY.map((m, i) => {
+    const runNum = RUN_HISTORY.length - i;
+    const isActive = m === MODEL;
+    return '<tr'+(isActive ? ' style="background:var(--cyan-dim);"' : '')+'>'+
+      '<td class="mono-cell">'+runNum+'</td>'+
+      '<td class="mono-cell">'+m.trainedAt.toLocaleTimeString()+'</td>'+
+      '<td class="mono-cell">'+m.featureIndices.length+' of 14</td>'+
+      '<td class="mono-cell">'+m.epochs+'</td>'+
+      '<td class="mono-cell">'+m.lr+'</td>'+
+      '<td class="mono-cell">'+m.testMetrics.accuracy+'%</td>'+
+      '<td class="mono-cell">'+m.testMetrics.recall+'%</td>'+
+      '<td>'+(isActive ? '<span class="pill cyan">Active</span>' : '<button class="btn run-use-btn" data-idx="'+i+'" style="padding:6px 12px; font-size:11.5px; border-color:var(--border);">Use this run</button>')+'</td>'+
+      '</tr>';
+  }).join('');
+  document.querySelectorAll('.run-use-btn').forEach(btn => {
+    btn.addEventListener('click', function(){
+      MODEL = RUN_HISTORY[parseInt(this.dataset.idx)];
+      renderLossChart(MODEL.history);
+      renderTrainResults(MODEL);
+      renderModelReport(MODEL);
+      renderRunHistory();
+      renderDashboard();
+      toast('Run reactivated', MODEL.testMetrics.accuracy+'% accuracy, '+MODEL.featureIndices.length+' features');
+    });
+  });
+}
+
+function renderLossChart(history){
+  const holder = document.getElementById('lossHolder');
+  if(typeof Chart==='undefined'){
+    holder.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--silver-dim);font-size:12px;text-align:center;padding:16px;">Chart library unavailable —<br>check your internet connection</div>';
+    return;
+  }
+  holder.innerHTML = '<canvas id="lossChart"></canvas>';
+  const canvas = document.getElementById('lossChart');
+  lossChart = new Chart(canvas, { type:'line',
+    data:{ labels: history.map(h=>h.epoch), datasets:[
+      {label:'Training loss', data:history.map(h=>h.loss), borderColor:'#FF9B57', backgroundColor:'rgba(255,155,87,0.08)', fill:true, tension:0.2, pointRadius:0, borderWidth:2, yAxisID:'y'},
+      {label:'Training accuracy %', data:history.map(h=>h.trainAcc), borderColor:'#4FE8D0', backgroundColor:'transparent', tension:0.2, pointRadius:0, borderWidth:2, yAxisID:'y1'} ]},
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{labels:{color:'#9FA6B0', font:{family:'Inter', size:11}, boxWidth:10, usePointStyle:true}}, tooltip:{backgroundColor:'#15181c', borderColor:'rgba(255,255,255,0.12)', borderWidth:1} },
+      scales:{ x:{title:{display:true, text:'epoch', color:'#666D77', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#666D77', font:{family:'IBM Plex Mono', size:9}, maxTicksLimit:8}},
+        y:{ position:'left', title:{display:true, text:'loss', color:'#FF9B57', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#666D77', font:{family:'IBM Plex Mono', size:9}} },
+        y1:{ position:'right', title:{display:true, text:'accuracy %', color:'#4FE8D0', font:{family:'IBM Plex Mono', size:10}}, grid:{display:false}, ticks:{color:'#666D77', font:{family:'IBM Plex Mono', size:9}}, min:0, max:100 } } } });
+}
+
+function renderTrainResults(model){
+  document.getElementById('trainResults').style.display = 'block';
+  const m = model.testMetrics;
+  document.getElementById('metricAcc').textContent = m.accuracy+'%';
+  document.getElementById('metricPrec').textContent = m.precision+'%';
+  document.getElementById('metricRec').textContent = m.recall+'%';
+  document.getElementById('metricF1').textContent = m.f1+'%';
+  document.getElementById('cmTp').textContent = fmt(m.confusionMatrix.tp);
+  document.getElementById('cmFp').textContent = fmt(m.confusionMatrix.fp);
+  document.getElementById('cmTn').textContent = fmt(m.confusionMatrix.tn);
+  document.getElementById('cmFn').textContent = fmt(m.confusionMatrix.fn);
+
+  const absWeights = model.weights.map(Math.abs);
+  const total = absWeights.reduce((a,b)=>a+b,0) || 1;
+  const bars = model.featureNames.map((name,i)=>({name, pct: absWeights[i]/total*100})).sort((a,b)=>b.pct-a.pct);
+  document.getElementById('featureBars').innerHTML = bars.map(f=>'<div class="feat-bar-row"><div class="feat-bar-label">'+f.name+'</div><div class="feat-bar-track"><div class="feat-bar-fill" style="width:'+f.pct.toFixed(1)+'%"></div></div><div class="feat-bar-val">'+f.pct.toFixed(0)+'%</div></div>').join('');
+}
+
+function renderModelReport(model){
+  const section = document.getElementById('modelReportSection');
+  section.style.display = 'block';
+  const m = model.testMetrics;
+  const absWeights = model.weights.map(Math.abs);
+  const total = absWeights.reduce((a,b)=>a+b,0) || 1;
+  const ranked = model.featureNames.map((name,i)=>({name, pct: absWeights[i]/total*100})).sort((a,b)=>b.pct-a.pct);
+  const topFeature = ranked[0];
+  const lrLabel = document.getElementById('lrSelect').selectedOptions[0].textContent;
+  const splitLabel = document.getElementById('splitSelect').selectedOptions[0].textContent;
+  const l2Label = document.getElementById('l2Select').selectedOptions[0].textContent;
+
+  const verdict = m.recall >= 95 ? 'excellent recall on real threats' : m.recall >= 85 ? 'solid recall on real threats' : 'moderate recall — consider more epochs or a lower decision threshold on the dashboard';
+  const narrative = 'This model was trained on '+fmt(model.nTrain)+' alerts using '+model.featureIndices.length+' of 14 available features, and evaluated on '+fmt(model.nTest)+' held-out alerts it never saw during training. '+
+    'It achieved '+m.accuracy+'% overall accuracy with '+m.recall+'% recall on real threats ('+verdict+'), and '+m.precision+'% precision. '+
+    'The single most influential signal was "'+topFeature.name+'" ('+topFeature.pct.toFixed(0)+'% of total learned weight), meaning the classifier leaned on this feature more than any other when distinguishing real threats from noise.';
+
+  document.getElementById('reportNarrative').textContent = narrative;
+  document.getElementById('reportConfigBody').innerHTML = [
+    ['Trained at', model.trainedAt.toLocaleString()],
+    ['Training samples', fmt(model.nTrain)],
+    ['Test samples (held-out)', fmt(model.nTest)],
+    ['Epochs', model.epochs],
+    ['Learning rate', lrLabel],
+    ['Train / test split', splitLabel],
+    ['L2 regularization', l2Label],
+    ['Features used', model.featureIndices.length+' of 14 — '+model.featureNames.join(', ')],
+  ].map(([k,v]) => '<tr><td class="mono-cell" style="color:var(--silver-dim); width:220px;">'+k+'</td><td>'+v+'</td></tr>').join('');
+  document.getElementById('reportMetricsBody').innerHTML = [
+    ['Accuracy', m.accuracy+'%'], ['Precision', m.precision+'%'], ['Recall', m.recall+'%'], ['F1 score', m.f1+'%'],
+    ['True positives (correctly caught threats)', fmt(m.confusionMatrix.tp)],
+    ['False negatives (missed threats)', fmt(m.confusionMatrix.fn)],
+    ['False positives (false alarms)', fmt(m.confusionMatrix.fp)],
+    ['True negatives (correctly cleared)', fmt(m.confusionMatrix.tn)],
+  ].map(([k,v]) => '<tr><td class="mono-cell" style="color:var(--silver-dim); width:220px;">'+k+'</td><td class="mono-cell">'+v+'</td></tr>').join('');
+}
+
+/* ============================================================
+   VULNERABILITY SCAN PAGE
+   ============================================================ */
+const VULN_EXAMPLES = {
+  sqli: "SELECT * FROM users WHERE username = 'admin' OR '1'='1' --",
+  xss: "<script>alert(document.cookie)<\/script>",
+  path: "GET /download?file=../../../../etc/passwd",
+  cmdi: "ping 8.8.8.8; cat /etc/shadow",
+  benign: "GET /products?category=shoes&sort=price_asc&page=2"
+};
+document.querySelectorAll('.example-chip').forEach(chip=>{
+  chip.addEventListener('click', ()=>{ document.getElementById('vulnInput').value = VULN_EXAMPLES[chip.dataset.example]; });
+});
+
+document.getElementById('scanBtn').addEventListener('click', function(){
+  const input = document.getElementById('vulnInput').value.trim();
+  if(!input){ toast('Nothing to scan', 'Paste some input first'); return; }
+  const findings = scanInput(input);
+  LAST_SCAN = { input, findings, scannedAt: new Date() };
+  renderFindings(findings);
+  toast(findings.length ? findings.length+' issue(s) found' : 'No issues found', 'Scan complete');
+});
+
+function renderFindings(findings){
+  const section = document.getElementById('findingsSection');
+  section.style.display = 'block';
+  document.getElementById('findingsHeading').textContent = findings.length ? findings.length+' potential issue'+(findings.length>1?'s':'')+' found' : 'No known patterns detected';
+  const iconMap = {
+    critical: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+    high: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+    medium: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>'
+  };
+  if(findings.length===0){
+    document.getElementById('findingsBody').innerHTML = '<div class="glass empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><div>No known vulnerability patterns matched this input.</div></div>';
+    return;
+  }
+  document.getElementById('findingsBody').innerHTML = findings.map(f=>
+    '<div class="glass finding-card"><div class="finding-icon '+f.severity+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'+iconMap[f.severity]+'</svg></div>'+
+    '<div><div class="finding-title">'+f.category+' <span class="pill '+(f.severity==='critical'?'red':f.severity==='high'?'amber':'yellow')+'">'+f.severity+'</span></div>'+
+    '<div class="finding-match">'+f.match.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>'+
+    '<div class="finding-tip">'+f.tip+'</div></div></div>'
+  ).join('');
+}
+
+/* ============================================================
+   EXPORTS
+   ============================================================ */
+document.getElementById('exportCsvBtn').addEventListener('click', function(){
+  if(!RESULTS.length){ toast('Nothing to export', 'Run analysis first'); return; }
+  const headers = ['alert_id','internal','port','protocol','packets_per_sec','flow_duration_ms','severity','prior_alert_count','label','final_decision','decided_by','confidence'];
+  function csvField(v){
+    if(v === null || v === undefined) return '';
+    const s = String(v);
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  const headerRow = headers.map(csvField).join(',');
+  const rows = RESULTS.map(r => [r.id, r.internal, r.port, r.protocol, r.pps, r.dur, r.severity, r.prior, r.label, r.finalDecision, r.decidedBy, r.confidence].map(csvField).join(','));
+  const csv = 'sep=,\r\n' + [headerRow, ...rows].join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='vulloy_triage_results.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('CSV exported', RESULTS.length+' rows');
+});
+
+document.getElementById('exportPdfBtn').addEventListener('click', function(){
+  if(typeof window.jspdf === 'undefined'){
+    toast('PDF library unavailable', 'Check your internet connection and try again');
+    return;
+  }
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'pt', format:'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    let y = 56;
+    const margin = 48;
+    const lineGap = 16;
+
+    function heading(text, size=16){
+      doc.setFont('helvetica','bold'); doc.setFontSize(size); doc.setTextColor(20,20,20);
+      doc.text(text, margin, y); y += size*0.9;
+    }
+    function body(text, size=10){
+      doc.setFont('helvetica','normal'); doc.setFontSize(size); doc.setTextColor(70,70,70);
+      const lines = doc.splitTextToSize(text, pageW - margin*2);
+      lines.forEach(line=>{ checkPage(); doc.text(line, margin, y); y += lineGap*0.85; });
+    }
+    function kv(label, value){
+      checkPage();
+      doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(40,40,40);
+      doc.text(label, margin, y);
+      doc.setFont('helvetica','normal'); doc.setTextColor(90,90,90);
+      doc.text(String(value), margin+190, y);
+      y += lineGap;
+    }
+    function divider(){ y+=6; doc.setDrawColor(220,220,220); doc.line(margin, y, pageW-margin, y); y+=20; }
+    function checkPage(){ if(y > 760){ doc.addPage(); y = 56; } }
+
+    heading('Vulloy — Alert Triage & Vulnerability Assessment', 17);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(120,120,120);
+    doc.text('Report generated '+new Date().toLocaleString(), margin, y); y += 26;
+
+    heading('About this tool', 13);
+    body('Vulloy is a client-side security triage tool combining a deterministic rule engine with a logistic regression classifier trained via real gradient descent, plus a regex-based input vulnerability scanner. All computation runs locally in the browser; no data is transmitted to any server.');
+    y += 4;
+    doc.setFont('helvetica','bolditalic'); doc.setFontSize(9.5); doc.setTextColor(180,60,40);
+    const dataNoticeText = DATA_MODE === 'real' && REAL_DATA_INFO
+      ? 'DATA SOURCE: This report analyzes a user-uploaded file ('+REAL_DATA_INFO.filename+', '+REAL_DATA_INFO.parsedRows+' rows) that was parsed entirely in the browser. '+(REAL_DATA_INFO.hasLabels ? 'The file included labels, so accuracy/recall figures below reflect real ground truth.' : 'The file had no label column, so accuracy/recall figures are not available for this data.')
+      : 'IMPORTANT: The alert data analyzed in this report is synthetically generated inside the browser for demonstration purposes. It is NOT real network traffic, telemetry, or data from this device — it does not reflect any actual activity on this or any other computer. Only the Vulnerability Scan section below (if present) reflects genuinely user-supplied input.';
+    const dataNotice = doc.splitTextToSize(dataNoticeText, pageW - margin*2);
+    dataNotice.forEach(line=>{ checkPage(); doc.text(line, margin, y); y += 13; });
+    y += 6;
+    divider();
+
+    heading('Alert triage summary', 13);
+    if(RESULTS.length){
+      const s = computeStats(RESULTS);
+      const threshold = parseFloat(document.getElementById('threshSlider').value);
+      kv('Alerts processed:', fmt(s.total));
+      kv('Decision threshold:', threshold.toFixed(2));
+      kv('Auto-filtered as noise:', fmt(s.filtered)+' ('+fmtPct(s.filtered/s.total*100)+')');
+      kv('Left for analyst review:', fmt(s.remaining));
+      kv('Real attacks missed:', fmt(s.missed)+' ('+fmtPct(s.missedPct)+' of real attacks)');
+      kv('Recall on real threats:', fmtPct(s.recall));
+      kv('Overall accuracy:', fmtPct(s.accuracy));
+    } else {
+      body('No analysis has been run yet in this session.');
+    }
+    divider();
+
+    heading('ML model', 13);
+    if(MODEL && MODEL.trained){
+      kv('Status:', 'Trained');
+      kv('Training samples:', fmt(MODEL.nTrain));
+      kv('Test samples (held-out):', fmt(MODEL.nTest));
+      kv('Epochs:', MODEL.epochs);
+      kv('Features used:', MODEL.featureIndices.length+' of 14');
+      kv('Learning rate:', MODEL.lr);
+      kv('Test accuracy:', MODEL.testMetrics.accuracy+'%');
+      kv('Test precision:', MODEL.testMetrics.precision+'%');
+      kv('Test recall:', MODEL.testMetrics.recall+'%');
+      kv('Test F1 score:', MODEL.testMetrics.f1+'%');
+      const cm = MODEL.testMetrics.confusionMatrix;
+      kv('Confusion matrix:', 'TP='+cm.tp+'  FP='+cm.fp+'  TN='+cm.tn+'  FN='+cm.fn);
+      y += 4;
+      body('Feature list: '+MODEL.featureNames.join(', '), 9);
+    } else {
+      body('No model has been trained yet in this session. Visit the Train Model page to train a real logistic regression classifier.');
+    }
+    divider();
+
+    heading('Vulnerability scan', 13);
+    if(LAST_SCAN){
+      kv('Last scan:', LAST_SCAN.scannedAt.toLocaleString());
+      kv('Findings:', LAST_SCAN.findings.length);
+      if(LAST_SCAN.findings.length){
+        y += 4;
+        LAST_SCAN.findings.forEach(f=>{
+          checkPage();
+          doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(180,60,40);
+          doc.text('• '+f.category+' ('+f.severity+')', margin, y); y += lineGap;
+          doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(90,90,90);
+          const tipLines = doc.splitTextToSize(f.tip, pageW - margin*2 - 14);
+          tipLines.forEach(line=>{ checkPage(); doc.text(line, margin+14, y); y+=13; });
+          y += 6;
+        });
+      }
+    } else {
+      body('No vulnerability scan has been run yet in this session. Visit the Vulnerability Scan page to test an input.');
+    }
+    divider();
+    doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(140,140,140);
+    doc.text('Vulloy is an independent learning project for educational purposes. Not a substitute for professional security auditing.', margin, y);
+
+    doc.save('vulloy_report.pdf');
+    toast('PDF exported', 'vulloy_report.pdf');
+  }catch(err){
+    console.error('PDF export error:', err);
+    toast('Export failed', 'See console for details');
+  }
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+try{
+  ALERTS = generateAlerts(1200);
+  renderDashboard();
+  document.getElementById('lastRunLabel').textContent = 'Initial batch loaded';
+}catch(err){
+  console.error('Vulloy init error:', err);
+}
+</script>
+</body>
+</html>
