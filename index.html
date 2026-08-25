@@ -199,6 +199,10 @@
   .feature-check input[type=checkbox]:checked::after{ content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--bg-0); font-weight:700; }
   .feature-check label{ font-size:13px; color:var(--platinum); cursor:pointer; }
   .feature-check .core-tag{ font-family:var(--font-mono); font-size:9px; color:var(--silver-dim); text-transform:uppercase; margin-left:auto; }
+  .option-check{ display:flex; align-items:center; gap:10px; cursor:pointer; }
+  .option-check input[type=checkbox]{ appearance:none; -webkit-appearance:none; width:17px; height:17px; border-radius:5px; border:1.5px solid var(--border-strong); background: rgba(255,255,255,0.03); flex-shrink:0; cursor:pointer; position:relative; transition: all .12s ease; }
+  .option-check input[type=checkbox]:checked{ background: linear-gradient(155deg, var(--cyan), #8FF3E4); border-color: var(--cyan); }
+  .option-check input[type=checkbox]:checked::after{ content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--bg-0); font-weight:700; }
   @media (max-width: 980px){ .feature-checklist{ grid-template-columns:1fr; } }
   .contrib-row{ display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:12.5px; }
   .contrib-name{ width:170px; flex-shrink:0; color:var(--silver); }
@@ -544,6 +548,72 @@
             <option value="0.05">0.05 (strong)</option>
             <option value="0.1">0.1 (heavy)</option>
           </select></div>
+
+        <button type="button" class="btn" id="toggleAdvancedBtn" style="margin-top:16px; width:100%; justify-content:space-between; border-color:var(--border); font-size:12.5px; padding:9px 14px;">
+          <span>Advanced options</span>
+          <svg id="advancedChevron" style="width:14px;height:14px; transition: transform .2s ease;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div id="advancedOptions" style="display:none; margin-top:4px;">
+          <div class="config-row"><label for="batchSizeSelect">Batch size (optimizer)</label>
+            <select id="batchSizeSelect">
+              <option value="0" selected>Full batch (all training samples)</option>
+              <option value="256">256 — mini-batch</option>
+              <option value="128">128 — mini-batch</option>
+              <option value="64">64 — mini-batch</option>
+              <option value="32">32 — mini-batch</option>
+              <option value="16">16 — mini-batch</option>
+              <option value="8">8 — mini-batch</option>
+              <option value="1">1 — stochastic (SGD)</option>
+            </select></div>
+          <div class="config-row"><label for="momentumSelect">Momentum</label>
+            <select id="momentumSelect">
+              <option value="0" selected>0 (none — plain gradient descent)</option>
+              <option value="0.5">0.5</option>
+              <option value="0.7">0.7</option>
+              <option value="0.9">0.9 (classic)</option>
+              <option value="0.95">0.95</option>
+              <option value="0.99">0.99 (aggressive)</option>
+            </select></div>
+          <div class="config-row"><label for="initSelect">Weight initialization</label>
+            <select id="initSelect">
+              <option value="zeros" selected>Zeros</option>
+              <option value="uniform">Small random (uniform)</option>
+              <option value="normal">Small random (normal / Gaussian)</option>
+            </select></div>
+          <div class="config-row"><label for="scalingSelect">Feature scaling</label>
+            <select id="scalingSelect">
+              <option value="zscore" selected>Standardization (z-score)</option>
+              <option value="minmax">Min-max normalization (0–1)</option>
+            </select></div>
+          <div class="config-row"><label for="classWeightSelect">Class weighting</label>
+            <select id="classWeightSelect">
+              <option value="none" selected>None</option>
+              <option value="balanced">Balanced (inverse frequency)</option>
+            </select></div>
+          <div class="config-row">
+            <label for="seedInput">Random seed</label>
+            <div class="num-stepper">
+              <input type="number" id="seedInput" placeholder="auto" min="0" max="999999999">
+              <button type="button" class="step-btn" id="seedRandomize" aria-label="Randomize seed" style="width:44px; font-size:11px;">⟳</button>
+            </div>
+            <p style="font-size:11px; color:var(--silver-dim); margin-top:4px;">Leave blank for a random seed each run, or set one for reproducible results.</p>
+          </div>
+          <div class="config-row">
+            <label class="option-check" style="padding:6px 0;">
+              <input type="checkbox" id="earlyStopCheck">
+              <span style="font-size:12.5px; color:var(--platinum);">Enable early stopping</span>
+            </label>
+          </div>
+          <div class="config-row" id="patienceRow" style="display:none;">
+            <label for="patienceSelect">Patience (epochs without improvement)</label>
+            <select id="patienceSelect">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+              <option value="40">40</option>
+            </select></div>
+        </div>
+
         <button class="btn" id="trainBtn" style="margin-top:22px; width:100%; justify-content:center;">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           Start training
@@ -921,41 +991,115 @@ function extractRawFeatures(a){
 }
 function sigmoid(z){ return 1/(1+Math.exp(-z)); }
 
-function trainLogisticRegression(alerts, {epochs=150, lr=0.1, l2=0.001, splitRatio=0.8, featureIndices=null}={}){
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gaussianRng(rng, mean=0, std=1){
+  const u = 1 - rng(), v = rng();
+  return mean + Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v) * std;
+}
+
+function trainLogisticRegression(alerts, opts={}){
+  const {
+    epochs=150, lr=0.1, l2=0.001, splitRatio=0.8, featureIndices=null,
+    batchSize=null, momentum=0, initStrategy='zeros', scalingMethod='zscore',
+    classWeighting='none', seed=null, earlyStopping=false, patience=10
+  } = opts;
+
+  const usedSeed = (seed !== null && seed !== undefined && !isNaN(seed)) ? seed : Math.floor(Math.random()*1e9);
+  const rng = mulberry32(usedSeed);
+
   const allFeatures = alerts.map(extractRawFeatures);
   const idxList = featureIndices && featureIndices.length ? featureIndices : allFeatures[0].map((_,i)=>i);
   const X_raw = allFeatures.map(row => idxList.map(i => row[i]));
   const y = alerts.map(a=>a.label==='True Positive'?1:0);
   const n = X_raw.length, nFeat = X_raw[0].length;
+
   const idx=[...Array(n).keys()];
-  for(let i=idx.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [idx[i],idx[j]]=[idx[j],idx[i]]; }
+  for(let i=idx.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [idx[i],idx[j]]=[idx[j],idx[i]]; }
   const splitPoint = Math.floor(n*splitRatio);
   const trainIdx = idx.slice(0,splitPoint), testIdx = idx.slice(splitPoint);
-  const mean=new Array(nFeat).fill(0), std=new Array(nFeat).fill(0);
-  trainIdx.forEach(i=>{ X_raw[i].forEach((v,j)=>mean[j]+=v); });
-  mean.forEach((m,j)=>mean[j]=m/trainIdx.length);
-  trainIdx.forEach(i=>{ X_raw[i].forEach((v,j)=>std[j]+=(v-mean[j])**2); });
-  std.forEach((s,j)=>std[j]=Math.sqrt(s/trainIdx.length)||1);
-  const normalize=(raw)=>raw.map((v,j)=>(v-mean[j])/std[j]);
+
+  let scaleParams;
+  if(scalingMethod === 'minmax'){
+    const min=new Array(nFeat).fill(Infinity), max=new Array(nFeat).fill(-Infinity);
+    trainIdx.forEach(i=>{ X_raw[i].forEach((v,j)=>{ if(v<min[j])min[j]=v; if(v>max[j])max[j]=v; }); });
+    scaleParams = { method:'minmax', min, max };
+  } else {
+    const mean=new Array(nFeat).fill(0), std=new Array(nFeat).fill(0);
+    trainIdx.forEach(i=>{ X_raw[i].forEach((v,j)=>mean[j]+=v); });
+    mean.forEach((m,j)=>mean[j]=m/trainIdx.length);
+    trainIdx.forEach(i=>{ X_raw[i].forEach((v,j)=>std[j]+=(v-mean[j])**2); });
+    std.forEach((s,j)=>std[j]=Math.sqrt(s/trainIdx.length)||1);
+    scaleParams = { method:'zscore', mean, std };
+  }
+  function normalize(raw){
+    if(scaleParams.method === 'minmax'){
+      return raw.map((v,j) => (v - scaleParams.min[j]) / ((scaleParams.max[j]-scaleParams.min[j]) || 1));
+    }
+    return raw.map((v,j) => (v - scaleParams.mean[j]) / scaleParams.std[j]);
+  }
   const X = X_raw.map(normalize);
   const X_train=trainIdx.map(i=>X[i]), y_train=trainIdx.map(i=>y[i]);
   const X_test=testIdx.map(i=>X[i]), y_test=testIdx.map(i=>y[i]);
-  let w=new Array(nFeat).fill(0), b=0;
-  const history=[];
-  for(let epoch=0; epoch<epochs; epoch++){
-    const preds = X_train.map(row=>sigmoid(row.reduce((s,v,j)=>s+v*w[j],0)+b));
-    const errors = preds.map((p,i)=>p-y_train[i]);
-    const gradW=new Array(nFeat).fill(0);
-    for(let i=0;i<X_train.length;i++){ for(let j=0;j<nFeat;j++){ gradW[j]+=errors[i]*X_train[i][j]; } }
-    for(let j=0;j<nFeat;j++){ gradW[j]=gradW[j]/X_train.length + l2*w[j]; }
-    const gradB = errors.reduce((s,e)=>s+e,0)/X_train.length;
-    for(let j=0;j<nFeat;j++){ w[j]-=lr*gradW[j]; }
-    b-=lr*gradB;
-    const eps=1e-9;
-    const loss = -preds.reduce((s,p,i)=>s+(y_train[i]*Math.log(p+eps)+(1-y_train[i])*Math.log(1-p+eps)),0)/preds.length;
-    const trainAcc = preds.filter((p,i)=>(p>=0.5?1:0)===y_train[i]).length/preds.length;
-    history.push({ epoch:epoch+1, loss:+loss.toFixed(4), trainAcc:+(trainAcc*100).toFixed(2) });
+
+  let wPos=1, wNeg=1;
+  if(classWeighting === 'balanced'){
+    const nPos = y_train.filter(v=>v===1).length, nNeg = y_train.length - nPos;
+    wPos = y_train.length / (2*Math.max(nPos,1));
+    wNeg = y_train.length / (2*Math.max(nNeg,1));
   }
+
+  let w;
+  if(initStrategy === 'uniform') w = Array.from({length:nFeat}, () => (rng()-0.5)*0.02);
+  else if(initStrategy === 'normal') w = Array.from({length:nFeat}, () => gaussianRng(rng, 0, 0.01));
+  else w = new Array(nFeat).fill(0);
+  let b = 0;
+  let velocityW = new Array(nFeat).fill(0), velocityB = 0;
+
+  const effectiveBatchSize = (!batchSize || batchSize >= X_train.length) ? X_train.length : batchSize;
+  const history = [];
+  let bestLoss = Infinity, epochsSinceImprovement = 0, actualEpochs = epochs, stoppedEarly = false;
+
+  for(let epoch=0; epoch<epochs; epoch++){
+    const order = [...Array(X_train.length).keys()];
+    for(let i=order.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
+
+    let epochLossSum = 0, nBatches = 0;
+    for(let start=0; start<X_train.length; start+=effectiveBatchSize){
+      const batchIdx = order.slice(start, start+effectiveBatchSize);
+      const Xb = batchIdx.map(i=>X_train[i]), yb = batchIdx.map(i=>y_train[i]);
+      const preds = Xb.map(row=>sigmoid(row.reduce((s,v,j)=>s+v*w[j],0)+b));
+      const errors = preds.map((p,i)=> (p - yb[i]) * (yb[i]===1 ? wPos : wNeg));
+      const gradW=new Array(nFeat).fill(0);
+      for(let i=0;i<Xb.length;i++){ for(let j=0;j<nFeat;j++){ gradW[j]+=errors[i]*Xb[i][j]; } }
+      for(let j=0;j<nFeat;j++){ gradW[j]=gradW[j]/Xb.length + l2*w[j]; }
+      const gradB = errors.reduce((s,e)=>s+e,0)/Xb.length;
+
+      for(let j=0;j<nFeat;j++){ velocityW[j] = momentum*velocityW[j] - lr*gradW[j]; w[j] += velocityW[j]; }
+      velocityB = momentum*velocityB - lr*gradB; b += velocityB;
+
+      const eps=1e-9;
+      const loss = -preds.reduce((s,p,i)=>s+(yb[i]*Math.log(p+eps)+(1-yb[i])*Math.log(1-p+eps)),0)/preds.length;
+      epochLossSum += loss; nBatches++;
+    }
+    const avgLoss = epochLossSum / nBatches;
+    const trainPreds = X_train.map(row=>sigmoid(row.reduce((s,v,j)=>s+v*w[j],0)+b));
+    const trainAcc = trainPreds.filter((p,i)=>(p>=0.5?1:0)===y_train[i]).length/trainPreds.length;
+    history.push({ epoch:epoch+1, loss:+avgLoss.toFixed(4), trainAcc:+(trainAcc*100).toFixed(2) });
+
+    if(earlyStopping){
+      if(avgLoss < bestLoss - 0.0005){ bestLoss = avgLoss; epochsSinceImprovement = 0; }
+      else { epochsSinceImprovement++; }
+      if(epochsSinceImprovement >= patience){ actualEpochs = epoch+1; stoppedEarly = true; break; }
+    }
+  }
+
   const testPreds = X_test.map(row=>sigmoid(row.reduce((s,v,j)=>s+v*w[j],0)+b));
   const testPredLabels = testPreds.map(p=>p>=0.5?1:0);
   let tp=0,fp=0,tn=0,fn=0;
@@ -965,8 +1109,9 @@ function trainLogisticRegression(alerts, {epochs=150, lr=0.1, l2=0.001, splitRat
   const precision=tp+fp>0?tp/(tp+fp):0;
   const recall=tp+fn>0?tp/(tp+fn):0;
   const f1=(precision+recall)>0?2*precision*recall/(precision+recall):0;
-  return { trained:true, weights:w, bias:b, normStats:{mean,std}, history, nTrain:trainIdx.length, nTest:testIdx.length,
-    epochs, lr, l2, splitRatio, featureIndices: idxList, featureNames: idxList.map(i=>FEATURE_NAMES[i]),
+  return { trained:true, weights:w, bias:b, normStats:scaleParams, history, nTrain:trainIdx.length, nTest:testIdx.length,
+    epochs: actualEpochs, configuredEpochs: epochs, stoppedEarly, lr, l2, splitRatio, featureIndices: idxList, featureNames: idxList.map(i=>FEATURE_NAMES[i]),
+    batchSize: effectiveBatchSize, fullBatch: effectiveBatchSize === X_train.length, momentum, initStrategy, scalingMethod, classWeighting, seed: usedSeed,
     testMetrics:{ accuracy:+(accuracy*100).toFixed(2), precision:+(precision*100).toFixed(2), recall:+(recall*100).toFixed(2), f1:+(f1*100).toFixed(2), confusionMatrix:{tp,fp,tn,fn} },
     trainedAt: new Date() };
 }
@@ -975,7 +1120,9 @@ function mlPredict(model, alert){
   if(!model || !model.trained) return null;
   const allRaw = extractRawFeatures(alert);
   const raw = model.featureIndices.map(i => allRaw[i]);
-  const norm = raw.map((v,j)=>(v-model.normStats.mean[j])/model.normStats.std[j]);
+  const norm = model.normStats.method === 'minmax'
+    ? raw.map((v,j)=>(v-model.normStats.min[j])/((model.normStats.max[j]-model.normStats.min[j])||1))
+    : raw.map((v,j)=>(v-model.normStats.mean[j])/model.normStats.std[j]);
   const z = norm.reduce((s,v,j)=>s+v*model.weights[j],0)+model.bias;
   return sigmoid(z);
 }
@@ -984,7 +1131,9 @@ function explainMLDecision(model, alert){
   if(!model || !model.trained) return [];
   const allRaw = extractRawFeatures(alert);
   const raw = model.featureIndices.map(i => allRaw[i]);
-  const norm = raw.map((v,j)=>(v-model.normStats.mean[j])/model.normStats.std[j]);
+  const norm = model.normStats.method === 'minmax'
+    ? raw.map((v,j)=>(v-model.normStats.min[j])/((model.normStats.max[j]-model.normStats.min[j])||1))
+    : raw.map((v,j)=>(v-model.normStats.mean[j])/model.normStats.std[j]);
   const contributions = norm.map((v,j)=>({ name: model.featureNames[j], contribution: v*model.weights[j] }));
   contributions.sort((a,b)=> Math.abs(b.contribution) - Math.abs(a.contribution));
   return contributions;
@@ -1471,10 +1620,10 @@ document.getElementById('epochsDown').addEventListener('click', function(){
 });
 
 document.getElementById('featSelectAll').addEventListener('click', function(){
-  document.querySelectorAll('.feature-check input[type=checkbox]').forEach(cb => cb.checked = true);
+  document.querySelectorAll('#featureChecklist input[type=checkbox]').forEach(cb => cb.checked = true);
 });
 document.getElementById('featSelectCore').addEventListener('click', function(){
-  document.querySelectorAll('.feature-check input[type=checkbox]').forEach((cb,i) => cb.checked = i < 6);
+  document.querySelectorAll('#featureChecklist input[type=checkbox]').forEach((cb,i) => cb.checked = i < 6);
 });
 
 function populateFeatureChecklist(){
@@ -1488,8 +1637,24 @@ function populateFeatureChecklist(){
 populateFeatureChecklist();
 
 function getSelectedFeatureIndices(){
-  return Array.from(document.querySelectorAll('.feature-check input[type=checkbox]:checked')).map(cb => parseInt(cb.dataset.idx));
+  return Array.from(document.querySelectorAll('#featureChecklist input[type=checkbox]:checked'))
+    .map(cb => parseInt(cb.dataset.idx))
+    .filter(idx => !isNaN(idx));
 }
+
+document.getElementById('toggleAdvancedBtn').addEventListener('click', function(){
+  const panel = document.getElementById('advancedOptions');
+  const chevron = document.getElementById('advancedChevron');
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+});
+document.getElementById('earlyStopCheck').addEventListener('change', function(){
+  document.getElementById('patienceRow').style.display = this.checked ? 'flex' : 'none';
+});
+document.getElementById('seedRandomize').addEventListener('click', function(){
+  document.getElementById('seedInput').value = Math.floor(Math.random()*999999999);
+});
 
 document.getElementById('trainBtn').addEventListener('click', function(){
   if(ALERTS.length < 50){ toast('Not enough data', 'Run analysis on the dashboard first'); return; }
@@ -1504,8 +1669,21 @@ document.getElementById('trainBtn').addEventListener('click', function(){
     const lr = parseFloat(document.getElementById('lrSelect').value);
     const splitRatio = parseFloat(document.getElementById('splitSelect').value);
     const l2 = parseFloat(document.getElementById('l2Select').value);
+    const batchSize = parseInt(document.getElementById('batchSizeSelect').value) || null;
+    const momentum = parseFloat(document.getElementById('momentumSelect').value);
+    const initStrategy = document.getElementById('initSelect').value;
+    const scalingMethod = document.getElementById('scalingSelect').value;
+    const classWeighting = document.getElementById('classWeightSelect').value;
+    const seedRaw = document.getElementById('seedInput').value;
+    const seed = seedRaw !== '' ? parseInt(seedRaw) : null;
+    const earlyStopping = document.getElementById('earlyStopCheck').checked;
+    const patience = parseInt(document.getElementById('patienceSelect').value);
 
-    MODEL = trainLogisticRegression(ALERTS, { epochs, lr, l2, splitRatio, featureIndices });
+    MODEL = trainLogisticRegression(ALERTS, {
+      epochs, lr, l2, splitRatio, featureIndices,
+      batchSize, momentum, initStrategy, scalingMethod, classWeighting, seed, earlyStopping, patience
+    });
+    document.getElementById('seedInput').value = MODEL.seed;
 
     RUN_HISTORY.unshift(MODEL);
     if(RUN_HISTORY.length > 10) RUN_HISTORY.pop();
@@ -1516,8 +1694,9 @@ document.getElementById('trainBtn').addEventListener('click', function(){
     renderRunHistory();
 
     btn.classList.remove('spin'); btn.disabled = false;
-    document.getElementById('trainStatus').textContent = 'Trained on '+fmt(MODEL.nTrain)+' samples, tested on '+fmt(MODEL.nTest)+' — '+MODEL.trainedAt.toLocaleTimeString();
-    toast('Model trained', MODEL.testMetrics.accuracy+'% test accuracy over '+epochs+' epochs');
+    const stoppedNote = MODEL.stoppedEarly ? ' (stopped early at epoch '+MODEL.epochs+')' : '';
+    document.getElementById('trainStatus').textContent = 'Trained on '+fmt(MODEL.nTrain)+' samples, tested on '+fmt(MODEL.nTest)+stoppedNote+' — '+MODEL.trainedAt.toLocaleTimeString();
+    toast('Model trained', MODEL.testMetrics.accuracy+'% test accuracy'+(MODEL.stoppedEarly ? ' (early-stopped)' : ' over '+MODEL.epochs+' epochs'));
 
     renderDashboard();
   }, 120);
@@ -1599,9 +1778,9 @@ function renderModelReport(model){
   const total = absWeights.reduce((a,b)=>a+b,0) || 1;
   const ranked = model.featureNames.map((name,i)=>({name, pct: absWeights[i]/total*100})).sort((a,b)=>b.pct-a.pct);
   const topFeature = ranked[0];
-  const lrLabel = document.getElementById('lrSelect').selectedOptions[0].textContent;
-  const splitLabel = document.getElementById('splitSelect').selectedOptions[0].textContent;
-  const l2Label = document.getElementById('l2Select').selectedOptions[0].textContent;
+  const lrLabel = model.lr;
+  const splitLabel = Math.round(model.splitRatio*100)+'% / '+Math.round((1-model.splitRatio)*100)+'%';
+  const l2Label = model.l2 === 0 ? 'None' : model.l2;
 
   const verdict = m.recall >= 95 ? 'excellent recall on real threats' : m.recall >= 85 ? 'solid recall on real threats' : 'moderate recall — consider more epochs or a lower decision threshold on the dashboard';
   const narrative = 'This model was trained on '+fmt(model.nTrain)+' alerts using '+model.featureIndices.length+' of 14 available features, and evaluated on '+fmt(model.nTest)+' held-out alerts it never saw during training. '+
@@ -1609,14 +1788,22 @@ function renderModelReport(model){
     'The single most influential signal was "'+topFeature.name+'" ('+topFeature.pct.toFixed(0)+'% of total learned weight), meaning the classifier leaned on this feature more than any other when distinguishing real threats from noise.';
 
   document.getElementById('reportNarrative').textContent = narrative;
+  const epochsDisplay = model.stoppedEarly ? model.epochs+' of '+model.configuredEpochs+' (stopped early)' : model.epochs;
+  const batchDisplay = model.fullBatch ? 'Full batch ('+model.batchSize+' samples)' : model.batchSize+' per batch';
   document.getElementById('reportConfigBody').innerHTML = [
     ['Trained at', model.trainedAt.toLocaleString()],
     ['Training samples', fmt(model.nTrain)],
     ['Test samples (held-out)', fmt(model.nTest)],
-    ['Epochs', model.epochs],
+    ['Epochs', epochsDisplay],
     ['Learning rate', lrLabel],
     ['Train / test split', splitLabel],
     ['L2 regularization', l2Label],
+    ['Batch size', batchDisplay],
+    ['Momentum', model.momentum],
+    ['Weight init', model.initStrategy],
+    ['Feature scaling', model.scalingMethod === 'minmax' ? 'Min-max (0–1)' : 'Standardization (z-score)'],
+    ['Class weighting', model.classWeighting === 'balanced' ? 'Balanced' : 'None'],
+    ['Random seed', model.seed],
     ['Features used', model.featureIndices.length+' of 14 — '+model.featureNames.join(', ')],
   ].map(([k,v]) => '<tr><td class="mono-cell" style="color:var(--silver-dim); width:220px;">'+k+'</td><td>'+v+'</td></tr>').join('');
   document.getElementById('reportMetricsBody').innerHTML = [
